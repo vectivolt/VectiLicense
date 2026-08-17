@@ -1,0 +1,11 @@
+__pycache__/
+
+# Vendor secrets. A private key in git is a keygen in git — which is the exact
+# failure this version of the library was written to eliminate.
+*.key
+vendor.key*
+*.pem
+
+# Minted output. Not secret, but there is no reason to carry it.
+*.png
+licences/

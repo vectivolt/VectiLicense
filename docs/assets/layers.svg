@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" width="1000" height="460" role="img" aria-label="VectiLicense four-layer architecture: freestanding core, injected HAL, optional transport helpers, optional Vecti bridges">
+  <title>VectiLicense architecture</title>
+  <desc>core is pure C99 with no dependencies; hal injects platform specifics; transport helpers are optional; bridges integrate the other Vecti libraries.</desc>
+  <defs>
+    <linearGradient id="vlaB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0fd08c"/><stop offset="1" stop-color="#10b7ce"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mid-tone strokes only: this must read on a white or a dark GitHub background,
+       so no layer relies on the page being one or the other. -->
+  <g font-family="system-ui, sans-serif">
+
+    <rect x="40" y="34" width="920" height="86" rx="12" fill="none" stroke="#7e968a" stroke-width="1.5" stroke-dasharray="7 6"/>
+    <text x="60" y="62" font-size="15" font-weight="700" fill="#7e968a">bridge/ — optional, each behind __has_include</text>
+    <g font-size="13" fill="#7e968a">
+      <rect x="60"  y="76" width="200" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="160" y="96" text-anchor="middle">VectiNet · captive portal</text>
+      <rect x="278" y="76" width="200" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="378" y="96" text-anchor="middle">VectiDash · QR + card</text>
+      <rect x="496" y="76" width="200" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="596" y="96" text-anchor="middle">VectiSerial · console</text>
+      <rect x="714" y="76" width="206" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="817" y="96" text-anchor="middle">VectiOTA · update gate</text>
+    </g>
+
+    <rect x="40" y="140" width="920" height="86" rx="12" fill="none" stroke="#7e968a" stroke-width="1.5" stroke-dasharray="7 6"/>
+    <text x="60" y="168" font-size="15" font-weight="700" fill="#7e968a">transport/ — optional; vl_verify() already takes a blob</text>
+    <g font-size="13" fill="#7e968a">
+      <rect x="60"  y="182" width="240" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="180" y="202" text-anchor="middle">vl_chunk · CAN / BLE reassembly</text>
+      <rect x="318" y="182" width="220" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="428" y="202" text-anchor="middle">vl_line · UART / USB-CDC</text>
+      <text x="560" y="202" font-size="12.5" fill="#7e968a">HTTP · MQTT · QR · file — need no helper at all</text>
+    </g>
+
+    <rect x="40" y="246" width="920" height="86" rx="12" fill="none" stroke="url(#vlaB)" stroke-width="2"/>
+    <text x="60" y="274" font-size="15" font-weight="700" fill="#0fd08c">hal/ — one struct of function pointers, you fill it</text>
+    <g font-size="13" fill="#7e968a">
+      <rect x="60"  y="288" width="130" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="125" y="308" text-anchor="middle">esp32</text>
+      <rect x="208" y="288" width="130" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="273" y="308" text-anchor="middle">rp2040</text>
+      <rect x="356" y="288" width="130" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="421" y="308" text-anchor="middle">stm32</text>
+      <rect x="504" y="288" width="130" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="569" y="308" text-anchor="middle">nxp</text>
+      <rect x="652" y="288" width="130" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="717" y="308" text-anchor="middle">posix</text>
+      <rect x="800" y="288" width="120" height="30" rx="7" fill="none" stroke="#7e968a"/><text x="860" y="308" text-anchor="middle">none (stub)</text>
+    </g>
+
+    <rect x="40" y="352" width="920" height="84" rx="12" fill="none" stroke="url(#vlaB)" stroke-width="3"/>
+    <text x="60" y="382" font-size="16" font-weight="700" fill="#0fd08c">core/ — pure C99, freestanding, zero dependencies</text>
+    <text x="60" y="406" font-size="13.5" fill="#7e968a">Ed25519 verify · SHA-512 · SHA-256 · base32 · payload parse — no malloc, no stdio, no RTOS, no vendor SDK</text>
+    <text x="60" y="426" font-size="12.5" fill="#7e968a">compiles for any C99 target · ~8.9 KB text · 0 bytes .data and .bss</text>
+
+    <!-- Dependency direction: everything above may call down; core calls nothing. -->
+    <g stroke="#7e968a" stroke-width="1.5" fill="none" marker-end="url(#vlaArrow)">
+      <path d="M500 120 V140"/><path d="M500 226 V246"/><path d="M500 332 V352"/>
+    </g>
+    <defs>
+      <marker id="vlaArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0 0 L10 5 L0 10 z" fill="#7e968a"/>
+      </marker>
+    </defs>
+  </g>
+</svg>

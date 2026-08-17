@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Offline">
+  <title>Offline</title>
+  <defs>
+    <linearGradient id="vl-offline" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0fd08c"/><stop offset="1" stop-color="#10b7ce"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="url(#vl-offline)"/>
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="none" stroke="#071310" stroke-opacity="0.18" stroke-width="3"/>
+  <path d="M32 56 a46 46 0 0 1 64 0" fill="none" stroke="#071310" stroke-width="9" stroke-linecap="round"/><path d="M46 72 a27 27 0 0 1 36 0" fill="none" stroke="#071310" stroke-width="9" stroke-linecap="round"/><circle cx="64" cy="90" r="7" fill="#071310"/><path d="M28 28 L100 100" stroke="#071310" stroke-width="10" stroke-linecap="round"/><path d="M28 28 L100 100" stroke="#0fd08c" stroke-width="4" stroke-linecap="round"/>
+</svg>

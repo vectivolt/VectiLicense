@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Key">
+  <title>Key</title>
+  <defs>
+    <linearGradient id="vl-key" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0fd08c"/><stop offset="1" stop-color="#10b7ce"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="url(#vl-key)"/>
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="none" stroke="#071310" stroke-opacity="0.18" stroke-width="3"/>
+  <circle cx="48" cy="64" r="17" fill="none" stroke="#071310" stroke-width="9"/><path d="M65 64 H104 M92 64 V80 M104 64 V84" stroke="#071310" stroke-width="9" stroke-linecap="round" fill="none"/>
+</svg>

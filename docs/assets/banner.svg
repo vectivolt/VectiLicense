@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="VectiLicense — offline Ed25519 device licensing. The device verifies; it cannot mint.">
+  <title>VectiLicense</title>
+  <desc>A vendor key signs a licence which travels offline to a device that can only verify it.</desc>
+  <defs>
+    <linearGradient id="vlBrand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0fd08c"/><stop offset="1" stop-color="#10b7ce"/>
+    </linearGradient>
+    <radialGradient id="vlGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0fd08c" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#0fd08c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="vlGrid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M30 0H0V30" fill="none" stroke="#0fd08c" stroke-opacity="0.07" stroke-width="1"/>
+    </pattern>
+    <clipPath id="vlFrame"><rect x="0" y="0" width="1200" height="300" rx="20"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#vlFrame)">
+    <rect width="1200" height="300" fill="#071310"/>
+    <rect width="1200" height="300" fill="url(#vlGrid)"/>
+    <ellipse cx="250" cy="150" rx="360" ry="200" fill="url(#vlGlow)"/>
+
+    <!-- Wordmark. Poster frame: fully drawn, so a renderer that freezes SMIL still reads well. -->
+    <text x="72" y="132" font-family="system-ui, sans-serif" font-size="58" font-weight="700" fill="#e8f2ec">Vecti<tspan fill="url(#vlBrand)">License</tspan></text>
+    <text x="74" y="176" font-family="system-ui, sans-serif" font-size="19" fill="#7e968a">Offline device licensing · Ed25519 · verify-only on device</text>
+    <text x="74" y="212" font-family="ui-monospace, monospace" font-size="15" fill="#0fd08c">no internet · no pre-generation · no keygen</text>
+
+    <!-- Vendor key (left) -->
+    <g transform="translate(700 150)">
+      <circle r="34" fill="none" stroke="url(#vlBrand)" stroke-width="2.5"/>
+      <circle r="12" fill="none" stroke="#0fd08c" stroke-width="3"/>
+      <path d="M10 0 H34 M28 0 V10 M34 0 V12" stroke="#0fd08c" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <text y="60" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12" fill="#7e968a">vendor key</text>
+      <!-- additive="sum" means these are a DELTA on the parent translate, not an
+           absolute position. Absolute values here doubled it and threw the group
+           off-canvas. -->
+      <animateTransform attributeName="transform" type="translate"
+                        values="0 0; 0 -4; 0 0" dur="4s" repeatCount="indefinite" additive="sum"/>
+    </g>
+
+    <!-- The licence travelling right: signed blob crossing an air gap -->
+    <g>
+      <line x1="748" y1="150" x2="912" y2="150" stroke="#1d3830" stroke-width="2" stroke-dasharray="6 6"/>
+      <text x="830" y="132" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#7e968a">air gap</text>
+      <rect x="-16" y="-9" width="32" height="18" rx="4" fill="url(#vlBrand)">
+        <animateTransform attributeName="transform" type="translate"
+                          values="748 150; 912 150" dur="2.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;0" dur="2.6s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <!-- Device (right): holds only a public key -->
+    <g transform="translate(1000 150)">
+      <rect x="-56" y="-46" width="112" height="92" rx="12" fill="#0e211b" stroke="#1d3830" stroke-width="2"/>
+      <rect x="-34" y="-26" width="68" height="40" rx="5" fill="none" stroke="url(#vlBrand)" stroke-width="2.5"/>
+      <path d="M-12 -6 l8 9 l17 -19" fill="none" stroke="#0fd08c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+            stroke-dasharray="44" stroke-dashoffset="0">
+        <animate attributeName="stroke-dashoffset" values="44;44;0;0" dur="2.6s" repeatCount="indefinite"/>
+      </path>
+      <text y="36" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12" fill="#7e968a">public key only</text>
+      <g stroke="#1d3830" stroke-width="2">
+        <path d="M-56 -24 h-12 M-56 0 h-12 M-56 24 h-12 M56 -24 h12 M56 0 h12 M56 24 h12"/>
+      </g>
+    </g>
+  </g>
+</svg>

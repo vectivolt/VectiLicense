@@ -1,0 +1,62 @@
+{
+  "name": "VectiLicense",
+  "version": "1.0.0",
+  "description": "Offline device licensing for embedded targets. The device holds only a 32-byte Ed25519 public key and can verify a licence; it structurally cannot mint one, so dumping the firmware yields no keygen. Pure C99 core with no dependencies, a one-struct HAL, and optional bridges for VectiNet, VectiDash, VectiSerial and VectiOTA.",
+  "keywords": [
+    "license",
+    "licensing",
+    "activation",
+    "ed25519",
+    "signature",
+    "offline",
+    "esp32",
+    "rp2040",
+    "stm32"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vectivolt/VectiLicense.git"
+  },
+  "authors": [
+    {
+      "name": "VectiVolt",
+      "email": "team@vectivolt.com",
+      "maintainer": true
+    }
+  ],
+  "frameworks": "*",
+  "platforms": "*",
+  "headers": "VectiLicense.h",
+  "export": {
+    "exclude": [
+      "build",
+      "build-*",
+      "*.key",
+      "tools/*.key"
+    ]
+  },
+  "build": {
+    "includeDir": "include",
+    "srcFilter": [
+      "+<core/*.c>",
+      "+<transport/*.c>",
+      "+<hal/esp32/*.c>",
+      "+<hal/rp2040/*.c>",
+      "+<hal/stm32/*.c>",
+      "+<hal/nxp/*.c>"
+    ],
+    "flags": [
+      "-Icore",
+      "-Isrc",
+      "-Ibridge",
+      "-Itransport",
+      "-Ihal/esp32",
+      "-Ihal/rp2040",
+      "-Ihal/stm32",
+      "-Ihal/nxp",
+      "-Wall",
+      "-Wextra"
+    ]
+  }
+}
