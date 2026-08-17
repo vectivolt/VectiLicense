@@ -55,7 +55,9 @@ is the long version, and it is the most important file here.
 ## What has actually been built and run
 
 **The only things in this repository that are actually executed are the host test suite
-and the ARM cross-compile.** Everything else is source that has been read and reviewed,
+and the ARM cross-compile.** Compiling is not running: three MCU-family HALs now
+type-check in CI, but no ARM object produced here has ever been linked into an image
+or run on silicon. Everything else is source that has been read and reviewed,
 in a few cases compiled by hand, and in most cases never built at all.
 
 **Executed, as `ctest` cases:**
@@ -84,8 +86,18 @@ in a few cases compiled by hand, and in most cases never built at all.
 - `hal/esp32/` — never built with a real ESP-IDF or Arduino-ESP32 toolchain. There is
   no ESP toolchain on the machine that wrote it. It is written to the documented
   ESP-IDF API and nothing has checked that claim against a header.
-- `hal/rp2040/`, `hal/stm32/`, `hal/nxp/` — written to the vendors' documented APIs
-  (pico-sdk, STM32Cube HAL, MCUXpresso). **Never compiled, never run.**
+- `hal/rp2040/`, `hal/stm32/`, `hal/nxp/` — **now type-checked in CI, still never
+  run.** Each compiles cleanly for its real target with its vendor code path *selected*
+  (`-Werror -Wpedantic`): stm32 180 B on Cortex-M4, rp2040 500 B on Cortex-M0+, nxp
+  204 B Kinetis / 164 B i.MX RT. RP2040 builds against stand-in pico-sdk headers, and
+  the NXP lint path declares `SIM`/`OCOTP` itself with **deliberately bogus base
+  addresses** — enough for a compiler to read the logic, not enough to read a fuse.
+  Register offsets, flash layout and fuse semantics remain unverified until someone
+  runs them on a board.
+
+  CI asserts a **minimum object size** for each, because the first attempt at this
+  reported "compiles clean" while producing a 4-byte object: every vendor `#if` was
+  false, so an empty translation unit had been compiled and nothing was checked.
 - `bridge/vl_bridge_ota.h`, `vl_bridge_serial.h`, `vl_bridge_net.h`,
   `vl_bridge_dash.h` — **never compiled against the real VectiOTA, VectiSerial,
   VectiNet or VectiDash.** Each is behind `__has_include`, so an uninstalled sibling

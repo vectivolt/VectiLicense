@@ -1,0 +1,134 @@
+# VectiLicense CI.
+#
+# The point of this file is that the portability claim in the README is checked
+# by a machine on every push, not asserted. Three things are proven here:
+#
+#   1. core/ really is freestanding — it builds with -nostdinc against nothing
+#      but the compiler's own headers, for two different Cortex-M cores.
+#   2. Every MCU-family HAL is type-checked, including the ones whose vendor SDK
+#      is not installed. Without this, a HAL can rot for months because it
+#      compiles to an empty translation unit and nobody notices.
+#   3. The host test suite passes, including under ASan and UBSan.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+          ctest --test-dir build --output-on-failure
+
+      - name: Sanitizers
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -O1 -g \
+             -fsanitize=address,undefined -fno-sanitize-recover=all \
+             -Icore -Iinclude -Itests \
+             core/vl_*.c tests/test_vl_core.c -o /tmp/t_core
+          /tmp/t_core
+
+  freestanding-and-hals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+
+      # A hosted <string.h> does not exist on a bare-metal toolchain. The HALs
+      # legitimately use one on a real target, so stand one in to type-check them.
+      - name: Stand-in libc headers
+        run: |
+          mkdir -p /tmp/stub /tmp/pico/pico /tmp/pico/hardware/regs
+          cat > /tmp/stub/string.h <<'EOF'
+          #ifndef VL_STUB_STRING_H
+          #define VL_STUB_STRING_H
+          #include <stddef.h>
+          void *memcpy(void *, const void *, size_t);
+          void *memset(void *, int, size_t);
+          int   memcmp(const void *, const void *, size_t);
+          size_t strlen(const char *);
+          #endif
+          EOF
+          cat > /tmp/stub/time.h <<'EOF'
+          #ifndef VL_STUB_TIME_H
+          #define VL_STUB_TIME_H
+          typedef long time_t;
+          time_t time(time_t *);
+          #endif
+          EOF
+          cat > /tmp/pico/pico/unique_id.h <<'EOF'
+          #ifndef VL_STUB_UID_H
+          #define VL_STUB_UID_H
+          #include <stdint.h>
+          #define PICO_UNIQUE_BOARD_ID_SIZE_BYTES 8
+          typedef struct { uint8_t id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES]; } pico_unique_board_id_t;
+          void pico_get_unique_board_id(pico_unique_board_id_t *);
+          #endif
+          EOF
+          cat > /tmp/pico/hardware/flash.h <<'EOF'
+          #ifndef VL_STUB_FLASH_H
+          #define VL_STUB_FLASH_H
+          #include <stdint.h>
+          #include <stddef.h>
+          #define FLASH_SECTOR_SIZE 4096u
+          #define FLASH_PAGE_SIZE 256u
+          void flash_range_erase(uint32_t, size_t);
+          void flash_range_program(uint32_t, const uint8_t *, size_t);
+          #endif
+          EOF
+          cat > /tmp/pico/hardware/sync.h <<'EOF'
+          #ifndef VL_STUB_SYNC_H
+          #define VL_STUB_SYNC_H
+          #include <stdint.h>
+          uint32_t save_and_disable_interrupts(void);
+          void restore_interrupts(uint32_t);
+          #endif
+          EOF
+          echo '#define XIP_BASE 0x10000000u' > /tmp/pico/hardware/regs/addressmap.h
+
+      - name: core/ is freestanding
+        run: |
+          INC=$(arm-none-eabi-gcc -print-file-name=include)
+          for cpu in cortex-m0plus cortex-m4 cortex-m33; do
+            for f in core/*.c; do
+              arm-none-eabi-gcc -std=c99 -ffreestanding -nostdinc -isystem "$INC" \
+                -Icore -Iinclude -Wall -Wextra -Werror -Wpedantic \
+                -mcpu=$cpu -mthumb -Os -c "$f" -o /tmp/$(basename "$f").o
+            done
+            echo "$cpu: core clean"
+          done
+          arm-none-eabi-size -t /tmp/vl_*.o | tail -1
+
+      # Each HAL is compiled with its real code path SELECTED. Compiling with the
+      # guards off produces a 4-byte object and proves nothing — that mistake is
+      # why this step asserts a minimum object size.
+      - name: Every HAL type-checks
+        run: |
+          INC=$(arm-none-eabi-gcc -print-file-name=include)
+          base="-std=c99 -ffreestanding -nostdinc -isystem $INC -isystem /tmp/stub
+                -Icore -Iinclude -Wall -Wextra -Werror -Wpedantic -mthumb -Os"
+          check() {           # name, object, minimum bytes of text
+            sz=$(arm-none-eabi-size "$2" | tail -1 | awk '{print $1}')
+            if [ "$sz" -lt "$3" ]; then
+              echo "::error::$1 compiled to only ${sz} B of text — the vendor guards excluded the real code"
+              exit 1
+            fi
+            echo "$1: ${sz} B text"
+          }
+          arm-none-eabi-gcc $base -DVL_HAL_STM32 -Ihal/stm32 -mcpu=cortex-m4 \
+            -c hal/stm32/vl_hal_stm32.c -o /tmp/stm32.o && check stm32 /tmp/stm32.o 80
+          arm-none-eabi-gcc $base -DVL_NXP_LINT -Ihal/nxp -mcpu=cortex-m4 \
+            -c hal/nxp/vl_hal_nxp.c -o /tmp/nxp_k.o && check nxp-kinetis /tmp/nxp_k.o 80
+          arm-none-eabi-gcc $base -DVL_NXP_LINT -DVL_NXP_LINT_IMXRT -Ihal/nxp -mcpu=cortex-m7 \
+            -c hal/nxp/vl_hal_nxp.c -o /tmp/nxp_i.o && check nxp-imxrt /tmp/nxp_i.o 80
+          arm-none-eabi-gcc $base -isystem /tmp/pico -DPICO_ON_DEVICE=1 \
+            -DPICO_FLASH_SIZE_BYTES=2097152 -Ihal/rp2040 -mcpu=cortex-m0plus \
+            -c hal/rp2040/vl_hal_rp2040.c -o /tmp/rp.o && check rp2040 /tmp/rp.o 200

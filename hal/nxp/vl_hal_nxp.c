@@ -23,6 +23,33 @@
 #  define VL_NXP_IMXRT 1
 #endif
 
+/* ---- lint path ---------------------------------------------------------
+ * Without the MCUXpresso SDK this file used to compile to nothing at all, so
+ * no compiler had ever looked at the UID logic below — a whole HAL that
+ * type-checked only on a machine nobody building CI has. VL_NXP_LINT declares
+ * just enough of SIM / OCOTP for the code to be compiled and warned about.
+ *
+ * These are NOT usable register maps. The peripheral base addresses are
+ * deliberately bogus, so anything built this way reads nothing real; the point
+ * is to let -Wall -Wextra -Werror see the code, not to run it. A real port
+ * still needs the vendor SDK, which the auto-detect above will pick up.
+ * -------------------------------------------------------------------- */
+#if defined(VL_NXP_LINT) && !defined(VL_NXP_HAVE_SDK)
+#  include <stdint.h>
+typedef struct { volatile uint32_t UIDH, UIDMH, UIDML, UIDL; } VL_LINT_SIM_Type;
+typedef struct { volatile uint32_t CFG0, CFG1; } VL_LINT_OCOTP_Type;
+extern VL_LINT_SIM_Type   *const vl_lint_sim;
+extern VL_LINT_OCOTP_Type *const vl_lint_ocotp;
+#  define SIM   vl_lint_sim
+#  define OCOTP vl_lint_ocotp
+#  if defined(VL_NXP_LINT_IMXRT)
+#    define VL_NXP_IMXRT 1
+#  else
+#    define VL_NXP_KINETIS 1
+#    define SIM_UIDH_UID_MASK 1u   /* exercise the 16-byte Kinetis variant */
+#  endif
+#endif
+
 #if defined(VL_NXP_KINETIS) || defined(VL_NXP_IMXRT)
 
 #include <string.h>
