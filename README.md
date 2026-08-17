@@ -111,6 +111,32 @@ in a few cases compiled by hand, and in most cases never built at all.
   all it does: nothing links those objects into an image, and no ARM object produced
   here has ever executed.
 
+**Linked into a real firmware image:**
+
+- A minimal bare-metal Cortex-M image (linker script + reset vector + a `main` that
+  calls `vl_compute_fingerprint()` and `vl_verify()`) links and produces a flashable
+  `.bin`: **8,972 B on Cortex-M0+, 8,444 B on Cortex-M4**, 0 bytes `.data`, 44 bytes
+  `.bss`. `nm` confirms `vl_verify`, `vl_ed25519_verify`, `vl_sha512_final` and
+  `vl_base32_decode` are all present, so the linker kept the real crypto rather than
+  garbage-collecting it. The image has still never been **executed** on silicon.
+
+- **Linking surfaced a dependency that compiling never could.** With `-nostdlib` the
+  link fails on three ARM EABI helpers:
+
+  | symbol | needed by | why |
+  |---|---|---|
+  | `__aeabi_lmul` | `vl_ed25519.c` | 64-bit multiply — Ed25519 field arithmetic |
+  | `__aeabi_llsr` | `vl_sha512.c` | 64-bit logical shift — SHA-512 is a 64-bit hash |
+  | `__aeabi_uidiv` | `vl_base32.c` | 32-bit divide; Cortex-M0/M0+ has no divide instruction |
+
+  These live in **libgcc**, not libc. `core/` is freestanding in the C99 sense — it
+  includes no hosted headers and `__STDC_HOSTED__` is respected — but on a 32-bit core
+  it does require the compiler runtime. Two of the three are unavoidable: a 32-bit CPU
+  has no instruction for 64-bit multiply or shift, and Ed25519 and SHA-512 both need
+  them. Every real toolchain (pico-sdk, STM32Cube, MCUXpresso, ESP-IDF) links libgcc by
+  default, so this is not a practical blocker — but "freestanding" should not be read as
+  "links against literally nothing", and that is why it is written down here.
+
 **Compiled by hand, not in CI:**
 
 - `examples/baremetal/vl_gate.c` — zero diagnostics for the host and for Cortex-M0+.

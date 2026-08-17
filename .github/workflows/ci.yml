@@ -110,6 +110,9 @@ jobs:
       # Each HAL is compiled with its real code path SELECTED. Compiling with the
       # guards off produces a 4-byte object and proves nothing — that mistake is
       # why this step asserts a minimum object size.
+      - name: core/ links into a real image
+        run: ./tests/link/build.sh
+
       - name: Every HAL type-checks
         run: |
           INC=$(arm-none-eabi-gcc -print-file-name=include)
