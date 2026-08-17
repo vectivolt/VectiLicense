@@ -1,7 +1,46 @@
+<div align="center">
+
+<img src="docs/assets/banner.svg" alt="VectiLicense — offline Ed25519 device licensing" width="100%">
+
 # VectiLicense
 
-Offline device licensing for embedded products. The device holds a 32-byte Ed25519
-**public** key and can verify a licence. It structurally cannot mint one.
+**Offline device licensing for embedded products. The device holds a 32-byte Ed25519
+public key and can verify a licence — it structurally cannot mint one.**
+
+[![License](https://img.shields.io/badge/license-Apache--2.0-3da9fc?style=flat-square)](LICENSE)
+[![Crypto](https://img.shields.io/badge/crypto-Ed25519%20verify--only-0fd08c?style=flat-square)](#the-licence-format)
+[![Core](https://img.shields.io/badge/core-freestanding%20C99-10b7ce?style=flat-square)](#portability)
+[![Flash](https://img.shields.io/badge/flash-9.3%20kB-f0aa2c?style=flat-square)](#footprint)
+[![Static RAM](https://img.shields.io/badge/static%20RAM-0%20bytes-0fd08c?style=flat-square)](#footprint)
+[![Network](https://img.shields.io/badge/network-never-7e968a?style=flat-square)](#how-activation-actually-goes)
+[![Tests](https://img.shields.io/badge/tests-9%2F9%20·%20ASan%20%2B%20UBSan-2ee5a0?style=flat-square)](#build-and-test)
+
+<img src="docs/assets/stickers/key.svg" width="60" alt="">
+<img src="docs/assets/stickers/shield.svg" width="60" alt="">
+<img src="docs/assets/stickers/signature.svg" width="60" alt="">
+<img src="docs/assets/stickers/lock.svg" width="60" alt="">
+<img src="docs/assets/stickers/chip.svg" width="60" alt="">
+<img src="docs/assets/stickers/offline.svg" width="60" alt="">
+
+</div>
+
+---
+
+## 🔐 Why asymmetric — the whole point in one picture
+
+<img src="docs/assets/keygen.svg" alt="Symmetric licensing embeds the minting key in every firmware image, so one flash dump forges licences for the entire fleet. Asymmetric licensing ships only a public key." width="100%">
+
+The design this replaces was **symmetric**: the salt that verified a licence also minted
+one, so it had to live in every firmware image. A single `esptool read_flash` produced a
+keygen for every device the vendor would ever sell. That is not fixable by hiding the
+key better — it is fixable only by not shipping it.
+
+---
+
+## 🧱 How it is put together
+
+<img src="docs/assets/layers.svg" alt="Four layers: freestanding core, injected HAL, optional transport helpers, optional Vecti bridges" width="100%">
+
 
 ```c
 vl_status_t st = vl_verify(blob, &CFG, hal, &lic);

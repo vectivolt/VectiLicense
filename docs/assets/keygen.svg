@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 340" width="1000" height="340" role="img" aria-label="Symmetric licensing puts the minting key in every firmware image, so one flash dump forges licences for the whole fleet. Asymmetric licensing ships only a public key, so a flash dump yields nothing.">
+  <title>Why VectiLicense is asymmetric</title>
+  <defs>
+    <linearGradient id="kgOk" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0fd08c"/><stop offset="1" stop-color="#10b7ce"/>
+    </linearGradient>
+    <marker id="kgArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c62f38"/>
+    </marker>
+    <marker id="kgArrOk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7e968a"/>
+    </marker>
+  </defs>
+  <g font-family="system-ui, sans-serif">
+
+    <!-- BEFORE -->
+    <text x="30" y="34" font-size="17" font-weight="700" fill="#c62f38">Symmetric (the design this replaces)</text>
+    <rect x="30" y="52" width="440" height="252" rx="14" fill="none" stroke="#c62f38" stroke-opacity="0.45" stroke-width="1.5"/>
+
+    <rect x="56" y="80" width="150" height="52" rx="9" fill="none" stroke="#7e968a"/>
+    <text x="131" y="103" text-anchor="middle" font-size="13" fill="#7e968a">vendor salt</text>
+    <text x="131" y="121" text-anchor="middle" font-size="11.5" fill="#c62f38">mints AND verifies</text>
+
+    <path d="M206 106 H286" stroke="#c62f38" stroke-width="2" marker-end="url(#kgArr)"/>
+    <rect x="292" y="80" width="152" height="52" rx="9" fill="none" stroke="#c62f38"/>
+    <text x="368" y="103" text-anchor="middle" font-size="13" fill="#55665e">every firmware image</text>
+    <text x="368" y="121" text-anchor="middle" font-size="11.5" fill="#c62f38">salt embedded</text>
+
+    <path d="M368 132 V176" stroke="#c62f38" stroke-width="2" marker-end="url(#kgArr)"/>
+    <rect x="252" y="182" width="232" height="46" rx="9" fill="none" stroke="#c62f38"/>
+    <text x="368" y="204" text-anchor="middle" font-size="13" fill="#55665e">esptool read_flash</text>
+    <text x="368" y="221" text-anchor="middle" font-size="11.5" fill="#c62f38">salt extracted</text>
+
+    <path d="M252 205 H176" stroke="#c62f38" stroke-width="2" marker-end="url(#kgArr)"/>
+    <rect x="46" y="182" width="124" height="46" rx="9" fill="#c62f38" fill-opacity="0.14" stroke="#c62f38"/>
+    <text x="108" y="204" text-anchor="middle" font-size="13" font-weight="700" fill="#c62f38">KEYGEN</text>
+    <text x="108" y="221" text-anchor="middle" font-size="11" fill="#c62f38">whole fleet</text>
+
+    <text x="56" y="270" font-size="12.5" fill="#7e968a">One dumped device forges licences for every device</text>
+    <text x="56" y="288" font-size="12.5" fill="#7e968a">you will ever ship. Obfuscation cannot fix this.</text>
+
+    <!-- AFTER -->
+    <text x="530" y="34" font-size="17" font-weight="700" fill="#0fd08c">Asymmetric (VectiLicense)</text>
+    <rect x="530" y="52" width="440" height="252" rx="14" fill="none" stroke="url(#kgOk)" stroke-width="2"/>
+
+    <rect x="556" y="80" width="150" height="52" rx="9" fill="none" stroke="#7e968a"/>
+    <text x="631" y="103" text-anchor="middle" font-size="13" fill="#7e968a">private key</text>
+    <text x="631" y="121" text-anchor="middle" font-size="11.5" fill="#0fd08c">stays with you</text>
+
+    <path d="M706 106 H786" stroke="#7e968a" stroke-width="2" marker-end="url(#kgArrOk)"/>
+    <rect x="792" y="80" width="152" height="52" rx="9" fill="none" stroke="url(#kgOk)"/>
+    <text x="868" y="103" text-anchor="middle" font-size="13" fill="#55665e">every firmware image</text>
+    <text x="868" y="121" text-anchor="middle" font-size="11.5" fill="#0fd08c">public key only</text>
+
+    <path d="M868 132 V176" stroke="#7e968a" stroke-width="2" marker-end="url(#kgArrOk)"/>
+    <rect x="752" y="182" width="232" height="46" rx="9" fill="none" stroke="#7e968a"/>
+    <text x="868" y="204" text-anchor="middle" font-size="13" fill="#55665e">esptool read_flash</text>
+    <text x="868" y="221" text-anchor="middle" font-size="11.5" fill="#7e968a">yields a public key</text>
+
+    <path d="M752 205 H676" stroke="#7e968a" stroke-width="2" marker-end="url(#kgArrOk)"/>
+    <rect x="546" y="182" width="124" height="46" rx="9" fill="none" stroke="#7e968a" stroke-dasharray="5 4"/>
+    <text x="608" y="204" text-anchor="middle" font-size="13" font-weight="700" fill="#7e968a">nothing</text>
+    <text x="608" y="221" text-anchor="middle" font-size="11" fill="#7e968a">cannot mint</text>
+
+    <text x="556" y="270" font-size="12.5" fill="#7e968a">A dumped device yields a key that verifies and</text>
+    <text x="556" y="288" font-size="12.5" fill="#7e968a">signs nothing. Firmware patching still defeats it.</text>
+  </g>
+</svg>
