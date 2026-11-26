@@ -8,7 +8,9 @@
 
 #include "vl_chunk.h"
 
-#include "vl_libc.h"
+/* By relative path, like bridge/ reaches core/vl_util.h: the Arduino IDE's
+ * unity build has no -Icore, and this resolves under every build system. */
+#include "../core/vl_libc.h"
 
 /* A licence blob is public, signed data — there is nothing secret in this
  * buffer, so plain memcmp is correct here and constant time buys nothing. The

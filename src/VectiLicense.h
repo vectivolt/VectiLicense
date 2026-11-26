@@ -20,6 +20,12 @@
 
 #include "../include/vectilicense/vectilicense.h"
 
+// The HAL that VectiLicense_arduino.c compiles on this target. The IDE has no
+// -Ihal/esp32, so a sketch reaches vl_hal_esp32() only through this header.
+#if defined(ESP32) || defined(ESP_PLATFORM)
+#include "../hal/esp32/vl_hal_esp32.h"
+#endif
+
 #ifdef __cplusplus
 #include "../bridge/vl_bridge.h"
 #include "../bridge/vl_bridge_dash.h"
