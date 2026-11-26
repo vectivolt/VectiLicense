@@ -2,13 +2,10 @@
  * VectiLicense HAL — Espressif ESP32 family. See vl_hal_esp32.h.
  * (c) 2026 VectiVolt — Apache-2.0 License
  *
- * NEVER BUILT WITH A REAL ESP-IDF OR ARDUINO-ESP32 TOOLCHAIN. There is no ESP
- * toolchain on the machine this was written on, and no stand-in IDF headers
- * are checked in, so nothing in this repository has ever type-checked a single
- * call below. The API calls are the documented ones (esp_efuse_mac_get_default,
- * esp_chip_info, esp_flash_read_id, the nvs_* family, esp_secure_boot_enabled,
- * esp_flash_encryption_enabled) and the logic is the part worth reading; your
- * first build on real hardware is the first build there has ever been.
+ * The API calls are esp_efuse_mac_get_default, esp_chip_info,
+ * esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID), the nvs_* family,
+ * esp_secure_boot_enabled and esp_flash_encryption_enabled — all present in
+ * ESP-IDF 4.4 (Arduino-ESP32 2.0.x) and 5.x.
  */
 
 #include "vl_hal_esp32.h"
@@ -18,18 +15,15 @@
 #include <string.h>
 #include <time.h>
 
+#include <sdkconfig.h>                /* CONFIG_IDF_TARGET_* */
+
 #if defined(__has_include) && __has_include(<esp_mac.h>)
-#  include <esp_mac.h>            /* IDF 5.x */
+#  include <esp_mac.h>            /* IDF 4.4 and 5.x */
 #else
-#  include <esp_system.h>         /* IDF 4.x */
+#  include <esp_system.h>         /* older IDF 4.x */
 #endif
 
 #include <esp_chip_info.h>
-
-#if defined(__has_include) && !__has_include(<esp_flash.h>)
-#  error "VectiLicense ESP32 HAL needs <esp_flash.h> (IDF >= 4.0 / Arduino-ESP32 >= 2.0)."
-#endif
-#include <esp_flash.h>
 
 #include <nvs.h>
 
@@ -50,12 +44,52 @@
 #define VL_EPOCH_SANE_MIN 1577836800u
 
 #define VL_SEG_MAC_LEN    6u
-#define VL_SEG_CHIP_LEN   8u
-#define VL_SEG_FLASH_LEN  4u
+#define VL_SEG_MODEL_LEN  1u
+#define VL_SEG_UID_LEN    16u
+
+/* Targets whose eFuse table has OPTIONAL_UNIQUE_ID (a 128-bit per-die id in BLOCK2).
+ * The classic ESP32 has no such field; a target not listed here simply yields two
+ * segments. Adding a target to this list later changes the fingerprint of every chip of
+ * that target that carries the field — do it before the first licence for it is minted. */
+#if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || \
+    defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || \
+    defined(CONFIG_IDF_TARGET_ESP32H2)
+#  include <esp_efuse.h>
+#  include <esp_efuse_table.h>
+#  define VL_HAVE_UNIQUE_ID 1
+#endif
 
 /* -------------------------------------------------------------------------- */
 /* Identity                                                                    */
+/*                                                                             */
+/* Only facts burned into THIS die's eFuses by Espressif, read raw. The first  */
+/* version also hashed esp_chip_info()'s revision and feature bits and the SPI */
+/* flash JEDEC id. None of those identify a die: every chip of a batch shares  */
+/* them. Worse, they are not stable — `revision` is encoded differently by     */
+/* IDF 4 and IDF 5, the feature flags gained bits between releases, and the    */
+/* JEDEC id belongs to whichever flash part a module batch was built with and  */
+/* needs a live flash transaction to read — so an SDK upgrade or a transient    */
+/* read would have unlicensed devices that never changed. The chip model stays: */
+/* it is one stable enum byte that keeps an S3 licence off a C3.               */
 /* -------------------------------------------------------------------------- */
+#ifdef VL_HAVE_UNIQUE_ID
+/* Returns 1 and fills `uid` when the die carries a non-zero OPTIONAL_UNIQUE_ID. A die
+ * whose field reads all zero (never programmed) yields no segment, so its fingerprint is
+ * MAC + model — still unique, because the factory MAC is. */
+static int read_unique_id(uint8_t uid[VL_SEG_UID_LEN])
+{
+    size_t i;
+    uint8_t any = 0u;
+    memset(uid, 0, VL_SEG_UID_LEN);
+    if (esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, uid,
+                                  VL_SEG_UID_LEN * 8u) != ESP_OK) {
+        return -1;
+    }
+    for (i = 0u; i < VL_SEG_UID_LEN; i++) any |= uid[i];
+    return any != 0u ? 1 : 0;
+}
+#endif
+
 static vl_status_t read_id_segment(void *ctx, uint32_t idx,
                                    uint8_t *out, size_t cap, size_t *out_len)
 {
@@ -73,39 +107,26 @@ static vl_status_t read_id_segment(void *ctx, uint32_t idx,
     }
     case 1: {
         esp_chip_info_t info;
-        uint16_t rev;
-        uint32_t feat;
-        if (cap < VL_SEG_CHIP_LEN) return VL_ERR_BUFFER_TOO_SMALL;
+        if (cap < VL_SEG_MODEL_LEN) return VL_ERR_BUFFER_TOO_SMALL;
         memset(&info, 0, sizeof info);
         esp_chip_info(&info);
-        /* `revision` is uint8_t on IDF 4 and uint16_t (major*100+minor) on
-         * IDF 5. Widen to 16 bits so both encode without collapsing revs. */
-        rev  = (uint16_t)info.revision;
-        feat = (uint32_t)info.features;
-        out[0] = (uint8_t)info.model;
-        out[1] = (uint8_t)info.cores;
-        out[2] = (uint8_t)(rev & 0xFFu);
-        out[3] = (uint8_t)((rev >> 8) & 0xFFu);
-        out[4] = (uint8_t)(feat & 0xFFu);
-        out[5] = (uint8_t)((feat >> 8) & 0xFFu);
-        out[6] = (uint8_t)((feat >> 16) & 0xFFu);
-        out[7] = (uint8_t)((feat >> 24) & 0xFFu);
-        *out_len = VL_SEG_CHIP_LEN;
+        out[0] = (uint8_t)info.model;    /* esp_chip_model_t: ESP32-S3 = 9 */
+        *out_len = VL_SEG_MODEL_LEN;
         return VL_OK;
     }
+#ifdef VL_HAVE_UNIQUE_ID
     case 2: {
-        uint32_t id = 0;
-        if (cap < VL_SEG_FLASH_LEN) return VL_ERR_BUFFER_TOO_SMALL;
-        /* NULL selects the default (bootstrapped) flash chip. */
-        if (esp_flash_read_id(NULL, &id) != ESP_OK) return VL_ERR_PLATFORM;
-        if (id == 0u || id == 0x00FFFFFFu) return VL_ERR_PLATFORM;  /* bus stuck */
-        out[0] = (uint8_t)((id >> 24) & 0xFFu);
-        out[1] = (uint8_t)((id >> 16) & 0xFFu);
-        out[2] = (uint8_t)((id >> 8) & 0xFFu);
-        out[3] = (uint8_t)(id & 0xFFu);
-        *out_len = VL_SEG_FLASH_LEN;
+        uint8_t uid[VL_SEG_UID_LEN];
+        int have;
+        if (cap < VL_SEG_UID_LEN) return VL_ERR_BUFFER_TOO_SMALL;
+        have = read_unique_id(uid);
+        if (have < 0) return VL_ERR_PLATFORM;
+        if (have == 0) return VL_ERR_NO_MORE_SEGMENTS;
+        memcpy(out, uid, VL_SEG_UID_LEN);
+        *out_len = VL_SEG_UID_LEN;
         return VL_OK;
     }
+#endif
     default:
         return VL_ERR_NO_MORE_SEGMENTS;
     }

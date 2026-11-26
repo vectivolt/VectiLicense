@@ -2,20 +2,24 @@
  * VectiLicense HAL — Espressif ESP32 family (ESP-IDF 4.x / 5.x, Arduino-ESP32).
  * (c) 2026 VectiVolt — Apache-2.0 License
  *
- * NEVER BUILT WITH A REAL ESP-IDF OR ARDUINO-ESP32 TOOLCHAIN. Written to the
- * documented IDF API; no build here has ever seen an esp_* header. See the
- * README's "What has actually been built and run".
+ * See the README's "What has actually been built and run" for which toolchains
+ * have compiled this file.
  *
  * Identity segments, in fingerprint order. THIS ORDER IS PART OF THE ON-WIRE
  * FORMAT — changing it invalidates every licence already issued.
  *
- *   0  6 bytes  efuse base MAC          (esp_efuse_mac_get_default)
- *   1  8 bytes  chip model/cores/rev/features, little-endian (esp_chip_info)
- *   2  4 bytes  SPI flash JEDEC id, big-endian (esp_flash_read_id)
+ *   0   6 bytes  factory MAC, eFuse BLOCK1      (esp_efuse_mac_get_default)
+ *   1   1 byte   chip model                     (esp_chip_info().model)
+ *   2  16 bytes  eFuse OPTIONAL_UNIQUE_ID       (ESP32-S2/S3/C3/C6/H2 only, and
+ *                                                only when not all zero)
  *
- * Segment 0 alone would be forgeable by an integrator who overrides the MAC;
- * segment 1 pins the silicon and segment 2 the flash part, so a flash image
- * copied onto a different board yields a different fingerprint.
+ * Everything hashed is burned into the die by Espressif and read raw, so the
+ * fingerprint survives an SDK upgrade, a reflash and a flash-part change, and
+ * a flash image copied to another board yields that board's fingerprint. eFuse
+ * bits can only be set, never cleared; matching another die's MAC AND 128-bit
+ * unique id by setting bits needs a donor die whose bits are a subset of both.
+ * vl_mint.py `device-id --esp32` computes the same id on the host from the
+ * values `espefuse.py summary` prints.
  *
  * Optional callbacks provided:
  *   now_epoch       time(NULL), rejected as unset below 2020-01-01
