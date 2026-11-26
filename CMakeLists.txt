@@ -107,14 +107,40 @@ option(VL_SANITIZE_ALL "Build EVERY test with ASan + UBSan, not just fuzz_*" OFF
 if(VL_BUILD_TESTS)
     enable_testing()
 
-    set(VL_SAN_FLAGS -fsanitize=address,undefined -fno-sanitize-recover=all)
+    # Probe by RUNNING, not just linking. ASan reserves its allocator at a fixed
+    # address high in the address space, and on a kernel that gives a process
+    # less than that every ASan binary aborts before main(). The Raspberry Pi's
+    # arm64 kernel is built with CONFIG_ARM64_VA_BITS=39 and gcc 14's ASan wants
+    # 0x500000000000, so a link-only check passed there and then every fuzz case
+    # failed on the toolchain rather than on the code. UBSan needs no shadow
+    # memory and is the fallback: on such a host memory errors go unreported,
+    # undefined behaviour still aborts the run. A cross build cannot run the
+    # probe, so it keeps the link check.
+    set(VL_SAN_FLAGS "")
+    set(VL_HAVE_SANITIZERS FALSE)
     if(VL_SANITIZE_FUZZ AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        include(CheckCCompilerFlag)
-        set(CMAKE_REQUIRED_LINK_OPTIONS ${VL_SAN_FLAGS})
-        check_c_compiler_flag("-fsanitize=address,undefined" VL_HAVE_SANITIZERS)
-        unset(CMAKE_REQUIRED_LINK_OPTIONS)
+        include(CheckCSourceCompiles)
+        include(CheckCSourceRuns)
+        foreach(san IN ITEMS "address,undefined" "undefined")
+            string(MAKE_C_IDENTIFIER "VL_SAN_WORKS_${san}" var)
+            set(CMAKE_REQUIRED_FLAGS "-fsanitize=${san}")
+            set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=${san}")
+            if(CMAKE_CROSSCOMPILING)
+                check_c_source_compiles("int main(void) { return 0; }" ${var})
+            else()
+                check_c_source_runs("int main(void) { return 0; }" ${var})
+            endif()
+            unset(CMAKE_REQUIRED_FLAGS)
+            unset(CMAKE_REQUIRED_LINK_OPTIONS)
+            if(${var})
+                set(VL_SAN_FLAGS -fsanitize=${san} -fno-sanitize-recover=all)
+                set(VL_HAVE_SANITIZERS TRUE)
+                message(STATUS "VectiLicense: sanitizers for fuzz_*: -fsanitize=${san}")
+                break()
+            endif()
+        endforeach()
         if(NOT VL_HAVE_SANITIZERS)
-            message(STATUS "VectiLicense: no ASan/UBSan here — fuzz runs unsanitized")
+            message(STATUS "VectiLicense: no working ASan/UBSan here — fuzz runs unsanitized")
         endif()
     endif()
 

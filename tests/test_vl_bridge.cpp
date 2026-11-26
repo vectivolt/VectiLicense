@@ -8,9 +8,11 @@
  * Uses the same fake HAL segments and the same minted blobs as
  * tests/test_vl_core.c, via tests/gen_fixtures.py.
  *
- * Build (CMake does this for you):
- *   c++ -std=c++11 -Iinclude -Ibridge -Itests -Icore tests/test_vl_bridge.cpp \
- *       core/vl_*.c -o /tmp/test_vl_bridge && /tmp/test_vl_bridge
+ * Build (CMake does this for you). core/ is C, and must be compiled as C: a
+ * C++ compiler handed a .c file treats it as C++ and rejects vl_ed25519.c.
+ *   cc -std=c99 -O2 -Iinclude -c core/vl_*.c
+ *   c++ -std=c++11 -O2 -Iinclude -Ibridge -Itests -Icore tests/test_vl_bridge.cpp \
+ *       vl_*.o -o /tmp/test_vl_bridge && /tmp/test_vl_bridge
  *
  * Part of VectiLicense. Apache-2.0. */
 
@@ -126,17 +128,27 @@ static unsigned char g_stack_copy[VL_STACK_PIT];
 
 #if defined(__GNUC__)
 #define VL_NOINLINE __attribute__((noinline))
+/* The slab is written and never read (poison_stack) or read and never written
+ * (snapshot_stack), as far as the compiler can see, and GCC 14 -Wall says so:
+ * -Wunused-but-set-variable and -Wuninitialized, fatal under -Werror. Both
+ * are deliberate, and the truth is that the slab escapes: the next frame on
+ * this stack reuses it. An empty asm that takes its address and clobbers
+ * memory says exactly that, and keeps the stores and loads in the binary. */
+#define VL_ESCAPE(p) __asm__ __volatile__("" : : "r"(p) : "memory")
 #else
 #define VL_NOINLINE
+#define VL_ESCAPE(p) ((void)(p))
 #endif
 
 VL_NOINLINE static void poison_stack(void) {
     volatile unsigned char pit[VL_STACK_PIT];
     for (size_t i = 0; i < VL_STACK_PIT; i++) { pit[i] = 0x5a; }
+    VL_ESCAPE(pit);
 }
 
 VL_NOINLINE static void snapshot_stack(void) {
     volatile unsigned char pit[VL_STACK_PIT];
+    VL_ESCAPE(pit);
     /* Deliberately reading what the frames above left behind. */
     for (size_t i = 0; i < VL_STACK_PIT; i++) { g_stack_copy[i] = pit[i]; }
 }
