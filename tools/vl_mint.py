@@ -105,6 +105,35 @@ def fingerprint(segments) -> bytes:
     return h.digest()
 
 
+# hal/esp32's segments, in order: factory MAC (6 bytes, first octet first, as
+# `espefuse.py summary` prints "MAC (BLOCK1)"), esp_chip_info().model (1 byte),
+# then OPTIONAL_UNIQUE_ID (16 bytes, byte [0] first, as summary prints it) on
+# the targets whose HAL build reads it, and only when it is not all zero.
+# esp_chip_model_t names that are the same in IDF 4.4 and 5.x; for any other
+# chip pass the number (ESP32-H2, for one, is 6 in IDF 4.4 and 16 in 5.x).
+ESP32_MODELS = {"esp32": 1, "esp32s2": 2, "esp32c3": 5, "esp32s3": 9}
+# Models of the targets hal/esp32 reads OPTIONAL_UNIQUE_ID on: S2, C3, S3,
+# C6 (13) and H2 (6 or 16). Any other model never hashes a UID.
+ESP32_UID_MODELS = {2, 5, 6, 9, 13, 16}
+
+
+def esp32_segments(mac: bytes, model: int, uid) -> list:
+    if len(mac) != 6:
+        raise ValueError("the MAC is 6 bytes")
+    if not 0 <= model <= 255:
+        raise ValueError("the model is one byte")
+    segs = [mac, bytes([model])]
+    if uid is not None:
+        if len(uid) != 16:
+            raise ValueError("OPTIONAL_UNIQUE_ID is 16 bytes")
+        if any(uid):
+            if model not in ESP32_UID_MODELS:
+                raise ValueError(f"model {model} has no OPTIONAL_UNIQUE_ID; "
+                                 "omit --uid (the HAL hashes two segments)")
+            segs.append(uid)
+    return segs
+
+
 # ---------------------------------------------------------------------------
 # Ed25519, from a maintained library. Never hand-rolled.
 # ---------------------------------------------------------------------------
@@ -229,6 +258,41 @@ def cmd_pubkey(a):
     print(c_array(a.key_id, PUBKEY_OF(read_key(a.key))))
 
 
+def parse_hex_bytes(text: str, n: int, what: str) -> bytes:
+    """n bytes of hex, with the ':' '-' or ' ' separators espefuse and humans use."""
+    clean = "".join(ch for ch in text if ch not in ":- \t")
+    try:
+        raw = bytes.fromhex(clean)
+    except ValueError:
+        sys.exit(f"error: {what} {text!r} is not hex")
+    if len(raw) != n:
+        sys.exit(f"error: {what} is {n} bytes, got {len(raw)}")
+    return raw
+
+
+def cmd_device_id(a):
+    """The device id a board will print, computed from its eFuse values, so a
+    licence can be minted before the board is ever powered."""
+    if not a.esp32:
+        sys.exit("error: only --esp32 is supported")
+    mac = parse_hex_bytes(a.mac, 6, "--mac")
+    m = a.model.strip().lower()
+    if m in ESP32_MODELS:
+        model = ESP32_MODELS[m]
+    else:
+        try:
+            model = int(m, 0)
+        except ValueError:
+            sys.exit(f"error: --model {a.model!r}: a number, or one of "
+                     + ", ".join(sorted(ESP32_MODELS)))
+    uid = parse_hex_bytes(a.uid, 16, "--uid") if a.uid else None
+    try:
+        segs = esp32_segments(mac, model, uid)
+    except ValueError as e:
+        sys.exit(f"error: {e}")
+    print(b32(fingerprint(segs)[:DEVICE_ID_LEN]))
+
+
 def parse_when(s: str, end_of_day: bool) -> int:
     """YYYY-MM-DD (UTC, inclusive) or a raw epoch. 0 means unbounded."""
     if s is None:
@@ -246,13 +310,16 @@ def parse_when(s: str, end_of_day: bool) -> int:
 
 def cmd_issue(a):
     seed = read_key(a.key)
-    try:
-        dev = b32_decode(a.device_id, DEVICE_ID_LEN) if not a.device_id_hex \
-            else bytes.fromhex(a.device_id_hex)[:DEVICE_ID_LEN]
-    except ValueError as e:
-        sys.exit(f"error: bad --device-id: {e}")
-    if len(dev) != DEVICE_ID_LEN:
-        sys.exit("error: device id must be 16 bytes")
+    if a.device_id_hex:
+        # Exactly 16 bytes. This used to keep the first 16 of whatever it was
+        # given, so a mistyped id with extra digits minted a licence for some
+        # other device instead of being refused.
+        dev = parse_hex_bytes(a.device_id_hex, DEVICE_ID_LEN, "--device-id-hex")
+    else:
+        try:
+            dev = b32_decode(a.device_id, DEVICE_ID_LEN)
+        except ValueError as e:
+            sys.exit(f"error: bad --device-id: {e}")
 
     for name, val in (("--family", a.family), ("--key-id", a.key_id)):
         if not 0 <= val <= 255:
@@ -262,6 +329,11 @@ def cmd_issue(a):
 
     nb = parse_when(a.not_before, end_of_day=False)
     na = parse_when(a.expires, end_of_day=True)
+    # The payload holds these as uint32; out of range used to die in
+    # struct.pack with a traceback instead of saying which flag was wrong.
+    for name, val in (("--serial", a.serial), ("--not-before", nb), ("--expires", na)):
+        if not 0 <= val <= 0xFFFFFFFF:
+            sys.exit(f"error: {name} must fit in 32 bits (dates 1970..2106)")
     if nb and na and na < nb:
         sys.exit("error: --expires is before --not-before")
 
@@ -384,6 +456,44 @@ def cmd_selftest(_a):
         assert VERIFY(pk, sig, msg)
         assert not VERIFY(pk, SIGN(seed, p), msg)
 
+        # hal/esp32's fingerprint on the bench board's eFuse values. The same
+        # two ids are asserted by tests/test_vl_hal_esp32.c against the HAL's
+        # own source, so this tool and the firmware cannot drift apart.
+        bench_mac = parse_hex_bytes("d0:cf:13:73:b7:38", 6, "mac")
+        bench_uid = parse_hex_bytes("7b 9f 02 0b a1 35 75 a5 29 9f 6e 75 e6 6e 66 5a",
+                                    16, "uid")
+        assert bench_uid == bytes.fromhex("7b9f020ba13575a5299f6e75e66e665a")
+        assert b32(fingerprint(esp32_segments(bench_mac, ESP32_MODELS["esp32s3"],
+                                              bench_uid))[:16]) == "19PPVWEP2AD037V5ZMQV3S3XH8"
+        assert b32(fingerprint(esp32_segments(bench_mac, 9, None))[:16]) \
+            == "V183R9MVD2ER3C294P3TWGSCPR"
+        # a blank UID is no segment at all, exactly as on the device
+        assert esp32_segments(bench_mac, 9, bytes(16)) == esp32_segments(bench_mac, 9, None)
+        try:
+            esp32_segments(bench_mac, ESP32_MODELS["esp32"], bench_uid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a classic ESP32 has no UID segment to hash")
+
+        # REGRESSION: --device-id-hex kept the first 16 bytes of anything
+        # longer, and a 33-bit serial died inside struct.pack.
+        kq = os.path.join(d, "q.key")
+        fd = os.open(kq, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(seed.hex() + "\n")
+        base = dict(key=kq, device_id=None, device_id_hex=dev.hex(), family=2,
+                    features=0, not_before=None, expires=None, serial=1, key_id=3,
+                    qr=None, out=None, raw=True)
+        for bad in (dict(device_id_hex=dev.hex() + "00"), dict(serial=1 << 32),
+                    dict(expires=str(1 << 32))):
+            try:
+                cmd_issue(argparse.Namespace(**{**base, **bad}))
+            except SystemExit as e:
+                assert isinstance(e.code, str) and e.code.startswith("error:"), e.code
+            else:
+                raise AssertionError(f"issue accepted {bad}")
+
         # every single-bit flip in the payload breaks the signature
         for byte in range(PAYLOAD_LEN):
             for bit in range(8):
@@ -468,6 +578,17 @@ def main():
     g.add_argument("--key-id", type=int, default=1)
     g.set_defaults(fn=cmd_pubkey)
 
+    g = sub.add_parser("device-id", help="compute a board's device id from its eFuse "
+                                         "values (espefuse.py summary), no board needed")
+    g.add_argument("--esp32", action="store_true", help="hal/esp32's fingerprint")
+    g.add_argument("--mac", required=True,
+                   help="factory MAC as summary prints it, e.g. d0:cf:13:73:b7:38")
+    g.add_argument("--model", required=True,
+                   help="esp_chip_model_t: a number, or " + "|".join(sorted(ESP32_MODELS)))
+    g.add_argument("--uid", help="OPTIONAL_UNIQUE_ID, 32 hex digits as summary prints "
+                                 "it; omit when blank or absent (two segments)")
+    g.set_defaults(fn=cmd_device_id)
+
     g = sub.add_parser("issue", help="mint a licence for one device")
     g.add_argument("--key", default="vendor.key")
     g.add_argument("--device-id", help="26-character device id the customer reported")
@@ -499,7 +620,8 @@ def main():
         ap.error("issue needs --device-id or --device-id-hex")
 
     global SIGN, PUBKEY_OF, VERIFY
-    SIGN, PUBKEY_OF, VERIFY = _crypto()
+    if a.cmd != "device-id":            # the one subcommand that needs no Ed25519
+        SIGN, PUBKEY_OF, VERIFY = _crypto()
     a.fn(a)
 
 
