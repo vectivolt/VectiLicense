@@ -112,7 +112,9 @@ and reviewed and never built.
   3.31); the nine cases before `test_vl_hal_esp32` also ran on macOS with clang. On the
   Pi the fuzzer runs under **UBSan only**: its kernel gives a process a 39-bit address
   space, too small for ASan's allocator, so CMake probes by running a sanitized binary
-  and falls back.
+  and falls back. A 200,000-iteration soak there under UBSan, as two 100,000-iteration
+  runs on seeds `0x26112026` and `0x26112027`: 0 failures, and all 5,099 accepted
+  inputs decoded to the genuine licence.
 - **The freestanding ARM cross-compile.** `arm-none-eabi-gcc` (15.2.0 originally,
   14.3.rel1 on the Pi), Cortex-M4 and Cortex-M0+, `-ffreestanding -nostdinc -Os` plus
   the full warning set, as the cases `freestanding_cortex-m4` and
