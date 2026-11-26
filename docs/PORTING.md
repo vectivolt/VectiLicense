@@ -45,7 +45,8 @@ zero diagnostics. It is not a claim in a document — it is `ctest` cases
 whenever `arm-none-eabi-gcc` is on `PATH` and cover `transport/` as well as `core/`.
 
 Budget 9 KB of flash, 0 bytes of static RAM, and 5 KB of stack for whatever task calls
-`vl_verify()`.
+`vl_verify()` (on ESP32-S3: 11.7 KB, 4 bytes, and the same 5 KB; see the README's
+Footprint).
 
 ---
 

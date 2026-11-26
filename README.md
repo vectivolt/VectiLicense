@@ -13,7 +13,7 @@ public key and can verify a licence — it structurally cannot mint one.**
 [![Flash](https://img.shields.io/badge/flash-9.3%20kB-f0aa2c?style=flat-square)](#footprint)
 [![Static RAM](https://img.shields.io/badge/static%20RAM-0%20bytes-0fd08c?style=flat-square)](#footprint)
 [![Network](https://img.shields.io/badge/network-never-7e968a?style=flat-square)](#how-activation-actually-goes)
-[![Tests](https://img.shields.io/badge/tests-9%2F9%20·%20ASan%20%2B%20UBSan-2ee5a0?style=flat-square)](#build-and-test)
+[![Tests](https://img.shields.io/badge/tests-10%2F10%20·%20ASan%20%2B%20UBSan-2ee5a0?style=flat-square)](#build-and-test)
 
 <img src="docs/assets/stickers/key.svg" width="60" alt="">
 <img src="docs/assets/stickers/shield.svg" width="60" alt="">
@@ -59,12 +59,14 @@ network call, ever, and nothing to phone home to.
   `<stdint.h>` and `<stddef.h>` only. `<string.h>` is a *hosted* header, so core
   declares the three functions it calls (`memcpy`, `memset`, `memcmp`) itself. Your
   runtime must still provide those symbols; every bare-metal runtime does.
-- **9.2 KB of flash, 0 bytes of static RAM**, 4.4 KB of stack at the deepest point —
-  measured, not estimated. See [Footprint](#footprint).
+- **9.2 KB of flash, 0 bytes of static RAM**, 4.4 KB of stack at the deepest point on
+  Cortex-M (11.7 KB, 4 bytes and 4.5 KB on ESP32-S3) — measured, not estimated. See
+  [Footprint](#footprint).
 - **Apache-2.0**, one vendored public-domain dependency (TweetNaCl's verify half).
 - **What is executed here is a short list, and it is written down:**
-  [What has actually been built and run](#what-has-actually-been-built-and-run). Most
-  of `hal/`, all of `bridge/` and every example are *written*, not *run*.
+  [What has actually been built and run](#what-has-actually-been-built-and-run). Nothing
+  has run on a microcontroller yet; most of `hal/`, the four sibling bridges and two of
+  the three examples are *written* or at most *compiled*, not *run*.
 
 ---
 
@@ -93,30 +95,35 @@ is the long version, and it is the most important file here.
 
 ## What has actually been built and run
 
-**The only things in this repository that are actually executed are the host test suite
-and the ARM cross-compile.** Compiling is not running: three MCU-family HALs now
-type-check in CI, but no ARM object produced here has ever been linked into an image
-or run on silicon. Everything else is source that has been read and reviewed,
-in a few cases compiled by hand, and in most cases never built at all.
+**Run here: the host test suite, the minting tool and the POSIX example. Compiled and
+linked for Cortex-M, compiled and linked for ESP32-S3, and run on neither: nothing in
+this repository has yet executed on a microcontroller.** Compiling is not running, and
+the list below keeps the two apart. Everything not listed is source that has been read
+and reviewed and never built.
 
 **Executed, as `ctest` cases:**
 
-- **The host test suite.** Nine cases over six binaries — the SHA and RFC 8032 Ed25519
+- **The host test suite.** Ten cases over seven binaries — the SHA and RFC 8032 Ed25519
   known-answer vectors, every rejection path of `vl_verify()`, an 800-bit flip sweep, a
-  64-cell HAL matrix, `vecti::License` from `bridge/vl_bridge.h`, and a mutation fuzzer
-  under ASan + UBSan. `hal/posix` and `hal/none` are compiled in and exercised by it.
-- **The freestanding ARM cross-compile.** `arm-none-eabi-gcc 15.2.0`, Cortex-M4 and
-  Cortex-M0+, `-ffreestanding -nostdinc -Os` plus the full warning set, as the cases
-  `freestanding_cortex-m4` and `freestanding_cortex-m0plus`. It compiles, and that is
-  all it does: nothing links those objects into an image, and no ARM object produced
-  here has ever executed.
+  64-cell HAL matrix, `vecti::License` from `bridge/vl_bridge.h`, `hal/esp32`'s own
+  source run against stand-in IDF headers with fake eFuses and a fake NVS
+  (`test_vl_hal_esp32`), and a mutation fuzzer. `hal/posix` and `hal/none` are compiled
+  in and exercised by it. 10/10 on a Raspberry Pi 4 (Debian 13 arm64, gcc 14.2, CMake
+  3.31); the nine cases before `test_vl_hal_esp32` also ran on macOS with clang. On the
+  Pi the fuzzer runs under **UBSan only**: its kernel gives a process a 39-bit address
+  space, too small for ASan's allocator, so CMake probes by running a sanitized binary
+  and falls back.
+- **The freestanding ARM cross-compile.** `arm-none-eabi-gcc` (15.2.0 originally,
+  14.3.rel1 on the Pi), Cortex-M4 and Cortex-M0+, `-ffreestanding -nostdinc -Os` plus
+  the full warning set, as the cases `freestanding_cortex-m4` and
+  `freestanding_cortex-m0plus`. That case only compiles; the link is below.
 
 **Linked into a real firmware image:**
 
 - A minimal bare-metal Cortex-M image (linker script + reset vector + a `main` that
   calls `vl_compute_fingerprint()` and `vl_verify()`) links and produces a flashable
   `.bin`: **8,972 B on Cortex-M0+, 8,444 B on Cortex-M4**, 0 bytes `.data`, 44 bytes
-  `.bss`. `nm` confirms `vl_verify`, `vl_ed25519_verify`, `vl_sha512_final` and
+  `.bss` (9,084 B and 8,452 B with `arm-none-eabi-gcc` 14.3 on the Pi). `nm` confirms `vl_verify`, `vl_ed25519_verify`, `vl_sha512_final` and
   `vl_base32_decode` are all present, so the linker kept the real crypto rather than
   garbage-collecting it. The image has still never been **executed** on silicon.
 
@@ -137,28 +144,57 @@ in a few cases compiled by hand, and in most cases never built at all.
   default, so this is not a practical blocker — but "freestanding" should not be read as
   "links against literally nothing", and that is why it is written down here.
 
+**Compiled with the real ESP32 toolchain, never run on silicon:**
+
+- **`core/`, `transport/` and `hal/esp32/` as a PlatformIO library.** PlatformIO 6.2,
+  `platform = espressif32@6.8.0` (Arduino-ESP32 2.0.17 on ESP-IDF 4.4.7),
+  `xtensa-esp32s3-elf-gcc` 8.4.0 (esp-2021r2-patch5), `board = esp32-s3-devkitc-1`,
+  `lib_ldf_mode = chain+`, `-Werror=format`. A sketch calling `vl_hal_esp32()`,
+  `vl_compute_fingerprint()`, `vl_encode_device_id()`, the HAL's `blob_store` /
+  `blob_load`, `vl_verify()` and `vl_posture()` links into a `firmware.bin` with no
+  warnings. With Arduino's `-Wno-*` removed and this repository's whole warning set
+  added (`-Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wundef` and the rest),
+  the library's own files are clean too. That build is also how `library.json` was
+  found to compile **nothing**: its source filter was resolved against `src/`, so every
+  `vl_*` symbol was missing at link.
+- **`examples/esp32-arduino/`**, the same way, with none of the sibling libraries
+  installed. It links with no warnings. That compiles `vecti::License` for Xtensa, but
+  the four sibling bridges compile to nothing without their libraries.
+- **The Arduino IDE path** (`src/VectiLicense_arduino.c` and `<VectiLicense.h>`), with
+  the same compiler and only `src/` on the include path, which is what the IDE does. It
+  had never compiled before: two of its includes could not resolve. Neither the
+  Arduino IDE nor `arduino-cli` has been run.
+
+None of it has executed. The first run on silicon is the bench board, which should
+print the device id `19PPVWEP2AD037V5ZMQV3S3XH8`; until it does, the byte order the
+HAL reads its eFuses in rests on the IDF 4.4.7 source, and `vl_verify()`'s time on an
+ESP32-S3 is an estimate ([Footprint](#footprint)).
+
+**Run outside the test suite:**
+
+- `examples/posix/vl_activate.c` — compiles and runs on macOS and on a Raspberry Pi 4
+  (gcc 14.2, no warnings), and on both the keygen → issue → activate → re-check cycle
+  was exercised end to end against a locally generated key. Not a ctest case.
+- `tools/vl_mint.py` — `selftest` passes on Python 3.13.5 with `cryptography` 43.0.0.
+  A licence minted from `device-id --esp32` with `issue`, checked with
+  `inspect --pubkey`, verifies through `hal/esp32`'s source on the bench board's
+  values (the stand-in IDF of `test_vl_hal_esp32`).
+
 **Compiled by hand, not in CI:**
 
 - `examples/baremetal/vl_gate.c` — zero diagnostics for the host and for Cortex-M0+.
   Never linked into a firmware image, never flashed, never run on a board.
-- `examples/posix/vl_activate.c` — the one thing here that has been *run* outside the
-  test suite: it compiles and runs on macOS, and the keygen → issue → activate →
-  re-check cycle has been exercised end to end against a locally generated key. Not
-  built on Linux or on a Raspberry Pi, and not a ctest case.
 
 **Never compiled and never run, by anybody, anywhere in this repository:**
 
-- `hal/esp32/` — never built with a real ESP-IDF or Arduino-ESP32 toolchain. There is
-  no ESP toolchain on the machine that wrote it. It is written to the documented
-  ESP-IDF API and nothing has checked that claim against a header.
-- `hal/rp2040/`, `hal/stm32/`, `hal/nxp/` — **now type-checked in CI, still never
-  run.** Each compiles cleanly for its real target with its vendor code path *selected*
-  (`-Werror -Wpedantic`): stm32 180 B on Cortex-M4, rp2040 500 B on Cortex-M0+, nxp
-  204 B Kinetis / 164 B i.MX RT. RP2040 builds against stand-in pico-sdk headers, and
-  the NXP lint path declares `SIM`/`OCOTP` itself with **deliberately bogus base
-  addresses** — enough for a compiler to read the logic, not enough to read a fuse.
-  Register offsets, flash layout and fuse semantics remain unverified until someone
-  runs them on a board.
+- `hal/rp2040/`, `hal/stm32/`, `hal/nxp/` — **type-checked in CI, never run, and not
+  compiled by PlatformIO**, which builds only `hal/esp32/`. Each compiles cleanly for its
+  real target with its vendor code path *selected* (`-Werror -Wpedantic`): stm32 180 B
+  on Cortex-M4, rp2040 500 B on Cortex-M0+, nxp 204 B Kinetis / 164 B i.MX RT. RP2040
+  builds against stand-in pico-sdk headers, and the NXP lint path declares
+  `SIM`/`OCOTP` itself with **deliberately bogus base addresses** — enough for a
+  compiler to read the logic, not enough to read a fuse. Register offsets, flash layout
+  and fuse semantics remain unverified until someone runs them on a board.
 
   CI asserts a **minimum object size** for each, because the first attempt at this
   reported "compiles clean" while producing a 4-byte object: every vendor `#if` was
@@ -170,7 +206,6 @@ in a few cases compiled by hand, and in most cases never built at all.
   The Arduino-free half — `vecti::License` in `bridge/vl_bridge.h`, which is where all
   four bridges' logic actually lives — *is* compiled and tested, by
   `tests/test_vl_bridge.cpp`.
-- `examples/esp32-arduino/esp32-arduino.ino` — never built, never flashed.
 
 Expect to fix an include path on your first build of any of those. The logic is the
 part worth reading, and each file repeats this warning in its own header.
@@ -193,13 +228,13 @@ either.
 
 | Layer | Portable to | Status |
 |---|---|---|
-| `core/` — Ed25519 verify, SHA-256/512, base32, parse, constant-time compare | any conforming C99 target | **compile-verified**: clang (macOS arm64) `-Wall -Wextra -Werror -Wpedantic -Wconversion`; `arm-none-eabi-gcc` for Cortex-M4 and Cortex-M0+ with `-ffreestanding -nostdinc -Os` and the same warning set, as ctest cases `freestanding_cortex-m4` / `freestanding_cortex-m0plus` |
-| `hal/posix/` — Linux, Raspberry Pi, macOS | POSIX hosts | **compile-verified and run** on macOS; end-to-end activation exercised |
+| `core/` — Ed25519 verify, SHA-256/512, base32, parse, constant-time compare | any conforming C99 target | **compile-verified**: clang (macOS arm64) and gcc 14.2 (Raspberry Pi, arm64) `-Wall -Wextra -Werror -Wpedantic -Wconversion`; `arm-none-eabi-gcc` for Cortex-M4 and Cortex-M0+ with `-ffreestanding -nostdinc -Os` and the same warning set, as ctest cases `freestanding_cortex-m4` / `freestanding_cortex-m0plus`; `xtensa-esp32s3-elf-gcc` 8.4.0 with the same set. Run on the two hosts only |
+| `hal/posix/` — Linux, Raspberry Pi, macOS | POSIX hosts | **compile-verified and run** on macOS and a Raspberry Pi 4; end-to-end activation exercised on both |
 | `hal/none/` — the documented stub to fill in | anything | **compile-verified** |
-| `hal/esp32/` — efuse MAC + chip info + flash id, NVS storage, Secure Boot posture | ESP32 family | written to the ESP-IDF API. **Never built with a real ESP-IDF or Arduino-ESP32 toolchain** — there is none on the build machine |
-| `hal/rp2040/` — `pico_get_unique_board_id`, flash-sector storage | RP2040 / RP2350 | written to the documented pico-sdk API. **Never compiled, never run** |
-| `hal/stm32/` — `HAL_GetUIDw0/1/2`, or the raw UID base address | STM32 F0…U5, WB, WL | written to the documented Cube HAL API. **Never compiled, never run** |
-| `hal/nxp/` — Kinetis `SIM->UIDx`, i.MX RT OCOTP | NXP Kinetis, i.MX RT | written to the documented MCUXpresso API. **Never compiled, never run** |
+| `hal/esp32/` — factory MAC + chip model + eFuse `OPTIONAL_UNIQUE_ID`, NVS storage, Secure Boot / Flash Encryption posture | ESP32 family | **compiled** with Arduino-ESP32 2.0.17 (IDF 4.4.7) for ESP32-S3, and its source **run on the host** against stand-in IDF headers (`test_vl_hal_esp32`). **Never run on silicon** |
+| `hal/rp2040/` — `pico_get_unique_board_id`, flash-sector storage | RP2040 / RP2350 | written to the documented pico-sdk API; type-checked in CI against stand-in headers. **Never run** |
+| `hal/stm32/` — `HAL_GetUIDw0/1/2`, or the raw UID base address | STM32 F0…U5, WB, WL | written to the documented Cube HAL API; type-checked in CI. **Never run** |
+| `hal/nxp/` — Kinetis `SIM->UIDx`, i.MX RT OCOTP | NXP Kinetis, i.MX RT | written to the documented MCUXpresso API; type-checked in CI with bogus base addresses. **Never run** |
 | `transport/` — optional framing for CAN/BLE/UART | anything that moves 160 characters | **compile-verified**, tested (`test_vl_transport`), and cross-compiled freestanding |
 | `bridge/vl_bridge.h` — `vecti::License`, where all four bridges' logic lives | any C++11 (no Arduino) | **compiled and tested** on the host by `tests/test_vl_bridge.cpp` |
 | `bridge/vl_bridge_{ota,serial,net,dash}.h` — VectiOTA / VectiSerial / VectiNet / VectiDash shims | Arduino/ESP32 | header-only, each behind `__has_include`. **Never compiled against the real sibling libraries** — not once, not anywhere here |
@@ -210,6 +245,15 @@ fix an include path on your first build. The logic is the part worth reading, ea
 says so in its own header, and
 [What has actually been built and run](#what-has-actually-been-built-and-run) is the
 whole list in one place.
+
+**Build systems.** CMake builds `core/` and `transport/` plus the host HALs and the
+tests. **PlatformIO** (`lib_deps = https://github.com/vectivolt/VectiLicense.git#<commit>`)
+compiles `core/`, `transport/` and `hal/esp32/` (a NULL-returning stub off ESP32) and
+puts `include/`, `hal/esp32/`, `transport/`, `bridge/` and `src/` on the include path, so
+`#include "vectilicense/vectilicense.h"` and `#include "vl_hal_esp32.h"` both resolve; on
+any other platform, add your HAL's `.c` to your own sources. The **Arduino IDE** compiles
+`src/VectiLicense_arduino.c`, which pulls in the same files, and a sketch includes
+`<VectiLicense.h>`.
 
 A board nobody has ported? Copy `hal/none/` and write one function.
 [`docs/PORTING.md`](docs/PORTING.md) is a 30-minute walkthrough.
@@ -229,7 +273,8 @@ to paste. Back the private key up offline. Never commit it, never put it in firm
 never put it in CI unless CI is your signing service and the key lives in a secrets
 manager.
 
-**2. Paste the public key into your firmware** and pick a family byte:
+**2. Paste the public key into your firmware** and take a family byte from the
+[registry](docs/INTEGRATION.md#product-families) (2 is the examples' own):
 
 ```c
 #include "vectilicense/vectilicense.h"
@@ -285,8 +330,8 @@ Working code, all three deliberately different in how much they assume:
 
 | Example | What it shows | Verified |
 |---|---|---|
-| [`examples/posix/`](examples/posix/vl_activate.c) | the whole loop as a CLI: device id, verify, store, re-check | **compiles and runs on macOS**; the full keygen → issue → activate → re-check cycle was exercised end to end against a locally generated key. Not run on Linux or a Pi, and not a ctest case |
-| [`examples/esp32-arduino/`](examples/esp32-arduino/esp32-arduino.ino) | captive-portal activation, QR device id, `license` console command, OTA gating — every bridge behind `__has_include` | **never compiled, never flashed** — no ESP toolchain here |
+| [`examples/posix/`](examples/posix/vl_activate.c) | the whole loop as a CLI: device id, verify, store, re-check | **compiles and runs on macOS and a Raspberry Pi 4**; the full keygen → issue → activate → re-check cycle was exercised end to end on both against a locally generated key. Not a ctest case |
+| [`examples/esp32-arduino/`](examples/esp32-arduino/esp32-arduino.ino) | captive-portal activation, QR device id, `license` console command, OTA gating — every bridge behind `__has_include` | **compiles and links** with PlatformIO for ESP32-S3 with no sibling library installed (so every bridge compiled to nothing). **Never flashed** |
 | [`examples/baremetal/`](examples/baremetal/vl_gate.c) | `hal/none/` filled in for a Cortex-M with a 96-bit die id: no OS, no heap, no stdio, no clock, UART activation via `transport/vl_line.c` | **compiles**, zero diagnostics, with `-ffreestanding -Wall -Wextra -Werror` on the host and with `arm-none-eabi-gcc -mcpu=cortex-m0plus -Os -ffreestanding -nostdinc -isystem "$(arm-none-eabi-gcc -print-file-name=include)"` plus the same warning set. **Never linked, never flashed, never run**, and neither command is a ctest case |
 
 ---
@@ -356,21 +401,30 @@ QR codes do not mind.
 
 ## Footprint
 
-Measured, on this repository, with `arm-none-eabi-gcc 15.2.0 -Os -ffreestanding`:
+Measured, on this repository, with `arm-none-eabi-gcc 15.2.0 -Os -ffreestanding`, and
+for ESP32-S3 with `xtensa-esp32s3-elf-gcc` 8.4.0 and the flags PlatformIO's Arduino-ESP32
+2.0.17 build uses (`-Os -mlongcalls -ffunction-sections`):
 
-| | Cortex-M4 | Cortex-M0+ |
-|---|---|---|
-| `core/` text | 9,195 B | 9,319 B |
-| `.data` + `.bss` | 0 B | 0 B |
-| deepest stack chain (`-fstack-usage`) | — | 4,376 B |
+| | Cortex-M4 | Cortex-M0+ | ESP32-S3 |
+|---|---|---|---|
+| `core/` text | 9,195 B | 9,319 B | 11,667 B |
+| `.data` + `.bss` | 0 B | 0 B | 4 B |
+| deepest stack chain (`-fstack-usage`) | — | 4,376 B | 4,528 B |
 
 The stack chain is `vl_verify` 264 → `vl_ed25519_verify` 2,544 → `scalarmult` 32 →
-`add` 1,184 → `M` 304 → `car25519` 48. Size a task that calls `vl_verify()` with at
-least 5 KB. One `vl_verify()` measures **2.8 ms on an Apple M1 Pro at -O2** (1,000
-verifies of a valid blob, wall clock / 1,000); on a
-240 MHz ESP32 expect tens of milliseconds and on a Cortex-M0+ hundreds — those two are
-estimates, not measurements. Either way: call it at boot or from a work task, never
-from an interrupt or a network stack's callback.
+`add` 1,184 → `M` 304 → `car25519` 48 on Cortex-M0+, and 272 → 2,672 → 48 → 1,184 →
+304 → 48 on ESP32-S3. Size a task that calls `vl_verify()` with at least 5 KB free. The
+4 bytes on ESP32-S3 are `vl_util.c`'s volatile pointer to `memset`, which Xtensa gcc
+puts in `.data`. `hal/esp32` adds 912 B of text and `transport/` 482 B.
+
+One `vl_verify()` measures **2.8 ms on an Apple M1 Pro at -O2** (1,000 verifies of a
+valid blob, wall clock / 1,000) and about 8 ms on a Raspberry Pi 4. On a 240 MHz
+ESP32-S3 the estimate is **about 0.4 s**, from the compiled inner loop of the field
+multiply (23 instructions, 64-bit products inlined) times the ~10,800 multiplies one
+verify performs; this replaces an earlier guess of "tens of milliseconds", and it is
+still an estimate until a board measures it. A Cortex-M0+, with no 32×32→64 multiply,
+is slower again. Either way: call it at boot or from a work task, never from an
+interrupt, a network stack's callback or a loop with deadlines.
 
 Nothing allocates. There is no static writable state anywhere in `core/`.
 
@@ -388,15 +442,15 @@ transport/              optional framing: CAN/BLE chunk reassembly, UART lines
 bridge/                 optional shims for VectiDash / VectiNet / VectiSerial / VectiOTA
 tools/vl_mint.py        the ONLY thing that touches a private key
 tests/                  known-answer vectors, every rejection path, a bit-flip
-                        sweep, and a mutation fuzzer under ASan + UBSan
+                        sweep, hal/esp32 against stand-in IDF headers, and a
+                        mutation fuzzer under ASan + UBSan
 examples/               posix, esp32-arduino, baremetal
 ```
 
 The layering is a rule, not a suggestion: `core/` includes no vendor header, no
 `stdio.h`, no `time.h`, no `malloc`. Anything that talks to hardware lives behind
 `vl_hal_t`, and every callback in it except the fingerprint is optional and may be
-NULL. That is what makes the same object files run on an ESP32, an STM32, and your
-laptop.
+NULL. That is what lets the same source build for an ESP32, an STM32 and your laptop.
 
 ---
 
@@ -408,14 +462,17 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Six test binaries and nine ctest cases: SHA-256/512 and RFC 8032 Ed25519 known-answer
+Seven test binaries and ten ctest cases: SHA-256/512 and RFC 8032 Ed25519 known-answer
 vectors, the base32 codec, every rejection path of `vl_verify()`, a sweep that flips all
 800 bits of a valid blob and asserts every one is refused, a 64-cell matrix over the
-optional HAL callbacks, `vecti::License` from `bridge/`, a mutation fuzzer built with
-`-fsanitize=address,undefined` that asserts no crash and — the precise form of "no false
-accept" — that anything accepted decodes to exactly the bytes the vendor signed, and two
-freestanding `arm-none-eabi-gcc` cross-compiles that run whenever that toolchain is on
-`PATH`.
+optional HAL callbacks, `vecti::License` from `bridge/`, `hal/esp32`'s source against
+stand-in IDF headers (`tests/esp32_stub/`) pinned to the bench board's device id, a
+mutation fuzzer built with `-fsanitize=address,undefined` that asserts no crash and —
+the precise form of "no false accept" — that anything accepted decodes to exactly the
+bytes the vendor signed, and two freestanding `arm-none-eabi-gcc` cross-compiles that
+run whenever that toolchain is on `PATH`. Where an ASan binary cannot start (a 39-bit
+address space, as on a Raspberry Pi), CMake says so and builds the fuzzer with UBSan
+alone. `python3 tools/vl_mint.py selftest` is the minting tool's own check.
 
 ```bash
 ./build/fuzz_vl_verify 500000 12345      # a longer soak, any seed

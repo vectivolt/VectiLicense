@@ -85,11 +85,28 @@ about authenticity; only the device's `vl_verify()` does that.
 
 | Field | Advice |
 |---|---|
-| `--family` | One byte per product line. A licence for family 2 is refused on family 3 before any crypto runs. Assign these once and write them down. |
+| `--family` | One byte per product line. A licence for family 2 is refused on family 3 before any crypto runs. Take the next free number from the [registry](#product-families) and write it down there. |
 | `--features` | A 32-bit bitmap. Define the bits in a header shared by firmware and your order system, and never reuse a retired bit number. Bit 0 = "the product runs at all" is a common and useful convention. |
 | `--serial` | Monotonic, per issued licence, never reused. It is your only handle for revocation and your only handle on a support call. |
 | `--expires` | Omit for perpetual, which is the honest default for a device that may have no clock. Read [Clock reality](#clock-reality) before you sell a subscription. |
 | `--not-before` | Rarely needed. Useful for a licence emailed ahead of a scheduled upgrade. |
+
+### Product families
+
+The `family` byte is what keeps a licence bought for one product from opening another,
+and that only holds if no two products ever share a number. This table is the record.
+**A family is assigned once and never reused**, not even after a product is retired:
+licences minted for it are still out there, and a new product on the same number
+would accept them.
+
+| Family | Assigned to | Feature bits |
+|---|---|---|
+| `0x00` | nothing: it is what a zeroed `vl_config_t` holds | — |
+| `0x01`–`0x0F` | examples, tests and documentation only, never shipping firmware. In use: 1 (`examples/posix`, the `keygen` template), 2 (README, this file, `examples/esp32-arduino`, the test fixtures), 3 (`examples/baremetal`), 7 (`PORTING.md`) | — |
+| `0x10` (16) | **VectiPLC**, VectiVolt's DC PLC controller (ESP32-S3) | bit 0 = CHARGE, the board may run a charging session; bits 1–31 reserved, not enforced |
+| `0x11`– | unassigned; take the next one | |
+
+`vl_mint.py issue --family` takes the decimal number: `--family 16` for VectiPLC.
 
 ---
 
@@ -111,21 +128,53 @@ if (vl_compute_fingerprint(hal, fp) == VL_OK &&
 Crockford base32 has no `I`, `L`, `O` or `U`, and the decoder folds `I`/`l` to `1` and
 `O` to `0`, so a customer reading it aloud over the phone still works.
 
+**On ESP32 the id can be computed without the device**, from what `espefuse.py summary`
+prints, which lets a factory mint before first boot and cross-check what the board
+reports. `hal/esp32` hashes, in this order:
+
+| Segment | Bytes | Source | As `espefuse.py summary` prints it |
+|---|---|---|---|
+| 0 | 6 | factory MAC, eFuse BLOCK1 (`esp_efuse_mac_get_default`) | `MAC (BLOCK1)`, first octet first |
+| 1 | 1 | `esp_chip_info().model`, the build target's `esp_chip_model_t`: ESP32 1, S2 2, C3 5, S3 9 | — |
+| 2 | 16 | eFuse `OPTIONAL_UNIQUE_ID` (BLOCK2), on S2/S3/C3/C6/H2 only, and only when not all zero | `OPTIONAL_UNIQUE_ID`, byte [0] first |
+
+```bash
+python3 tools/vl_mint.py device-id --esp32 --mac d0:cf:13:73:b7:38 --model esp32s3 \
+        --uid 7b9f020ba13575a5299f6e75e66e665a
+19PPVWEP2AD037V5ZMQV3S3XH8
+```
+
+Omit `--uid` for a classic ESP32 or a blank UID (two segments). The tool and the HAL
+are held to the same answer by `tests/test_vl_hal_esp32.c`, which runs the HAL's own
+source against these values; that the IDF hands the HAL these bytes in this order is
+taken from the IDF 4.4.7 source and is confirmed only when a board prints the same id.
+
 **2. Get the 160 characters onto the device.** See [Delivery paths](#delivery-paths).
 This is the only part that differs between products.
 
 **3. Verify, then store — in that order.**
 
 ```c
+#include "vl_base32.h"                       /* core/, on the include path */
+
 vl_license_t lic;
 vl_status_t st = vl_verify(blob, &CFG, hal, &lic);
 if (st == VL_OK && hal->blob_store) {
-    hal->blob_store(hal->ctx, blob, strlen(blob));
+    /* Store the canonical 160 characters, not the paste: a paste may carry
+     * dashes and line breaks, and the shipped HALs hold VL_BLOB_STR_LEN. */
+    uint8_t bin[VL_BLOB_BIN_LEN];
+    char canon[VL_BLOB_STR_BUF_LEN];
+    vl_base32_decode(blob, bin, sizeof bin, VL_BLOB_BIN_LEN);   /* verified above */
+    vl_base32_encode(bin, sizeof bin, canon, sizeof canon);
+    st = hal->blob_store(hal->ctx, canon, VL_BLOB_STR_LEN);
+    /* st != VL_OK: in force now, gone after a reboot. Tell the operator. */
 }
 ```
 
 Storing first and verifying at the next boot means a mistyped blob survives a power
-cycle and the customer's next message is "it says invalid and I can't clear it".
+cycle and the customer's next message is "it says invalid and I can't clear it". An
+earlier version of this snippet stored the paste as typed and ignored the result, so a
+grouped paste verified, failed to store, and was gone at the next boot.
 
 **4. Re-verify at every boot.** A licence that was good at the factory is not evidence
 about this boot: the flash may have been swapped since, the board repaired, the clock
@@ -217,9 +266,11 @@ void loop()  { VectiNet.loop(); portal.loop(); license.pump(); }
 
 `portal.attach()` must run before `VectiNet.begin()`, which is when the form is frozen.
 
-Note the split: the portal POST runs on the AsyncTCP task, where an Ed25519 verify of
-tens of milliseconds and a blocking NVS write would starve every other socket. `portal.loop()` only queues;
-`license.pump()`, on the loop task, does the work.
+Note the split: the portal POST runs on the AsyncTCP task, where an Ed25519 verify (an
+estimated 0.4 s on a 240 MHz ESP32-S3; see [Threading, stack and timing](API.md#threading-stack-and-timing))
+and a blocking NVS write would starve every other socket. `portal.loop()` only queues;
+`license.pump()`, on the loop task, does the work. For the same reason, verify at boot
+or in a service mode, not from a control loop that has deadlines.
 
 ### Serial console
 

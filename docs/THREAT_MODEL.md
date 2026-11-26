@@ -121,7 +121,7 @@ is the single biggest variable in how much this library is worth to you:
 
 | HAL | Identity | Forgeable by |
 |---|---|---|
-| `hal/esp32` | eFuse base MAC + chip model/revision + SPI flash JEDEC id | burning eFuses on the target board, which is one-way, and matching the flash part. Strong. |
+| `hal/esp32` | factory MAC (eFuse BLOCK1) + chip model byte + the 128-bit eFuse `OPTIONAL_UNIQUE_ID` (S2/S3/C3/C6/H2, when programmed); segment table in [`INTEGRATION.md`](INTEGRATION.md#the-device-workflow) | burning eFuse bits on the attacker's own die until its MAC and its unique id both equal the victim's, which works only if every bit already set on that die is also set in the victim's values, since eFuse bits can be set and never cleared. Strong. A classic ESP32, or a die whose unique id was never programmed, rests on the MAC alone. |
 | `hal/stm32` | 96-bit factory UID, read-only | replacing the MCU. Strong. |
 | `hal/nxp` | Kinetis `SIM->UIDx` (128/96-bit) or i.MX RT OCOTP (64-bit), read-only | replacing the MCU. Strong. |
 | `hal/rp2040` | QSPI flash chip unique id | moving the flash chip — which also moves the licence, correctly. Note the id lives in the flash part, not the RP2040. |

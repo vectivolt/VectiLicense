@@ -377,8 +377,12 @@ int vl_ed25519_verify(const uint8_t sig[64], const uint8_t *msg, size_t len,
 
 Verification only. There is no signing function in this translation unit and none
 anywhere in the device build — that code was deleted, not disabled. Returns 0 for NULL
-arguments, for a public key that is not a point on the curve, and for an unreduced
-scalar `S`; there is no third state.
+arguments; for a public key that is not a point on the curve, is not canonically
+encoded, or has small order (the identity and the other 13 small-order encodings,
+32 zero bytes among them, each a universal forgery); for an unreduced scalar
+`S ≥ L`; and for an `R` that is not the canonical encoding of `[S]B − [h]A`. There is
+no third state. Against RFC 8032 §5.1.7 that is the cofactorless check
+`[S]B = R + [h]A` with stricter key decoding; see the header of `core/vl_ed25519.c`.
 
 ```c
 #include "vl_util.h"
@@ -421,17 +425,28 @@ Both follow core rules: no allocation, bounded, tolerant of duplicates and gaps.
 long as your HAL callbacks are; the `vl_config_t` is const and never written. Two
 threads may verify different blobs simultaneously.
 
-**Stack.** Measured with `-fstack-usage` on Cortex-M0+ at `-Os`, the deepest chain
-through `vl_verify()` is **4,376 bytes**: `vl_verify` 264 → `vl_ed25519_verify` 2,544 →
-`scalarmult` 32 → `add` 1,184 → `M` 304 → `car25519` 48. Give the calling task at least
-5 KB.
+**Stack.** Measured with `-fstack-usage` at `-Os`, the deepest chain through
+`vl_verify()` is `vl_verify` → `vl_ed25519_verify` → `scalarmult` → `add` → `M` →
+`car25519`:
+
+| Target | Chain | Total |
+|---|---|---|
+| Cortex-M0+ (arm-none-eabi-gcc) | 264 + 2,544 + 32 + 1,184 + 304 + 48 | **4,376 B** |
+| ESP32-S3 (xtensa-esp32s3-elf-gcc 8.4.0, Arduino-ESP32 2.0.17 flags) | 272 + 2,672 + 48 + 1,184 + 304 + 48 | **4,528 B** |
+
+Give the calling task at least 5 KB free at the call.
 
 **Time.** One `vl_verify()` measures **2.8 ms on an Apple M1 Pro at -O2** (1,000
-iterations, wall clock / 1,000). On a 240 MHz ESP32 expect tens of milliseconds and on a Cortex-M0+
-hundreds; those two are estimates, not measurements. Call `vl_verify()` at boot or from
-a work task — **never from an interrupt handler, and never from a network stack's
-callback.** The bridges enforce this split: paste handlers only queue, and `pump()` on
-the loop task does the verify and the flash write.
+iterations, wall clock / 1,000), and about 8 ms on a Raspberry Pi 4 (the `test_vl_core`
+run, on a shared machine). On a 240 MHz **ESP32-S3** the estimate is **about 0.4 s**:
+the field multiply's inner loop compiles to 23 instructions with the 64-bit products
+inlined, a verify runs it in about 10,800 multiplies, and that comes to roughly 90 M
+cycles. It is an estimate from the compiled code, not a measurement, and good to
+perhaps ±30 %. On a Cortex-M0+, which has no 32×32→64 multiply, expect more. Call
+`vl_verify()` at boot or from a work task — **never from an interrupt handler, never
+from a network stack's callback, and not from a loop with deadlines.** The bridges
+enforce this split: paste handlers only queue, and `pump()` on the loop task does the
+verify and the flash write.
 
 **Constant time.** The device-id comparison is constant-time and the vendored field
 arithmetic is constant-time. There is nothing secret on the device to leak — the key is

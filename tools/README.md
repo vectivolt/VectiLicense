@@ -15,10 +15,11 @@ vl_mint.py pubkey   --key vendor.key --key-id 1
 vl_mint.py issue    --key vendor.key --device-id <26 chars> --family 2 \
                     --features 0x0d --expires 2027-12-31 --serial 1001
 vl_mint.py inspect  <blob> [--pubkey <64 hex>]
+vl_mint.py device-id --esp32 --mac <aa:bb:cc:dd:ee:ff> --model <n|esp32s3|...> [--uid <32 hex>]
 vl_mint.py selftest
 ```
 
-Needs Python 3.8+ and `cryptography` (or `pynacl`). Ed25519 is not hand-rolled
+Needs Python 3.8+ and `cryptography` (or `pynacl`); checked on Python 3.13.5 with `cryptography` 43.0.0. Ed25519 is not hand-rolled
 here and must not be. `qrcode` + `pillow` are optional; without them `--qr`
 prints a note and everything else still works.
 
@@ -89,6 +90,26 @@ by leaving `VL_CHECKED_TIME` clear rather than by failing. If a subscription is
 the business model, either give the device an RTC or an SNTP source, or set
 `VL_FLAG_REQUIRE_CLOCK` and accept that an offline device then refuses to run.
 
+## A device id without the device (ESP32)
+
+`device-id --esp32` computes the id a board running `hal/esp32` will report, from
+the values `espefuse.py summary` prints, so a licence can be minted before first boot
+and a factory can check that the board reports what its eFuses say:
+
+```bash
+$ ./tools/vl_mint.py device-id --esp32 --mac d0:cf:13:73:b7:38 --model esp32s3 \
+      --uid "7b 9f 02 0b a1 35 75 a5 29 9f 6e 75 e6 6e 66 5a"
+19PPVWEP2AD037V5ZMQV3S3XH8
+```
+
+`--mac` is `MAC (BLOCK1)`, `--uid` is `OPTIONAL_UNIQUE_ID`, both in the order summary
+prints them; separators are optional. Omit `--uid` on a classic ESP32 or when it reads
+all zero: the HAL then hashes two segments, and so does this. `--model` is a number, or
+`esp32`, `esp32s2`, `esp32c3`, `esp32s3` (1, 2, 5, 9, the same in IDF 4.4 and 5.x). The
+segment table is in [`docs/INTEGRATION.md`](../docs/INTEGRATION.md#the-device-workflow);
+`tests/test_vl_hal_esp32.c` holds the HAL's source to the same answer. No crypto library
+is needed for this subcommand.
+
 ## Reading a blob back
 
 `inspect` decodes without any key at all — useful when a customer sends you a
@@ -113,7 +134,9 @@ selftest: ok
 That asserts the payload layout, the base32 codec (including that the grouping
 characters a human pastes decode identically), that the domain-separation
 prefix is really covered by the signature, that all 288 single-bit flips of a
-payload break it, and that the key-file permission gate fires.
+payload break it, that the key-file permission gate fires, the ESP32 device id of
+the bench board, and that `issue` refuses an over-long `--device-id-hex` and a
+serial or date outside 32 bits.
 
 The stronger check is cross-implementation: `tests/gen_fixtures.py` is an
 independent implementation of the same format that mints the blobs the C test

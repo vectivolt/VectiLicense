@@ -11,6 +11,8 @@ the code to mint is here and the key is here.
     vl_mint.py issue   --key vendor.key --device-id <26 chars> --family 2 \
                        --features 0x0d --expires 2027-12-31 --serial 1001
     vl_mint.py inspect  <blob>            # decode without any key
+    vl_mint.py device-id --esp32 --mac d0:cf:13:73:b7:38 --model esp32s3 \
+                         [--uid <32 hex>] # an ESP32's id from its eFuse values
     vl_mint.py selftest                   # mint -> inspect -> tamper, all asserted
 
 Key handling:
