@@ -42,7 +42,10 @@
     "srcFilter": [
       "+<core/*.c>",
       "+<transport/*.c>",
-      "+<hal/esp32/*.c>"
+      "+<hal/esp32/*.c>",
+      "+<hal/rp2040/*.c>",
+      "+<hal/stm32/*.c>",
+      "+<hal/nxp/*.c>"
     ],
     "flags": [
       "-Icore",
@@ -50,6 +53,9 @@
       "-Ibridge",
       "-Itransport",
       "-Ihal/esp32",
+      "-Ihal/rp2040",
+      "-Ihal/stm32",
+      "-Ihal/nxp",
       "-Wall",
       "-Wextra"
     ]
