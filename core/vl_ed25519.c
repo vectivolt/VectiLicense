@@ -65,13 +65,18 @@
  *
  * NOT CHANGED, AND WORTH KNOWING
  *
- *   A is now canonical-encoded and low-order-rejected (see above). R is not:
- *   like upstream, a non-canonical R is accepted, and the group equation is
- *   checked without clearing the cofactor. That is RFC 8032 "verify" rather
- *   than a stricter variant such as ZIP-215, and for this library's job — one
- *   vendor key, one signature per licence, no consensus protocol — the
- *   remaining difference has no effect. The key checks are not optional the
- *   way those are: a bad A forges, a re-spelled R does not.
+ *   A is now canonical-encoded and low-order-rejected (see above). R is never
+ *   decoded: like upstream, the verifier computes [S]B - [h]A, packs it, and
+ *   compares all 32 bytes with R. pack() only ever emits the canonical
+ *   encoding (y fully reduced, sign bit 0 when x = 0), so a non-canonical R
+ *   cannot match and is refused. (An earlier version of this note said the
+ *   opposite.) A small-order R is not singled out and need not be: with A of
+ *   full order, producing one that verifies is a forgery. The equation is
+ *   checked without the cofactor, [S]B = R + [h]A, which RFC 8032 5.1.7
+ *   permits; the cofactored form and the more permissive ZIP-215 rules exist
+ *   for consensus systems that need every verifier to agree on crafted
+ *   signatures, and one vendor key signing one licence is not that. The key
+ *   checks are not optional the way those are: a bad A forges.
  * ===========================================================================
  *
  * Part of VectiLicense. Apache-2.0. */

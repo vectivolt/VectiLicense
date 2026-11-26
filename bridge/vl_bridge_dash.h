@@ -76,9 +76,9 @@ public:
 
         // onChange runs on the loop task, from VectiDash.tick() — so calling
         // activate() here would be legal. It goes through submit() anyway so
-        // that every path into License looks the same, and so a 30 ms Ed25519
-        // verify plus an NVS write does not happen inside the tick() that is
-        // also trying to push updates to every open tab.
+        // that every path into License looks the same, and so an Ed25519 verify
+        // (an estimated 0.4 s on an ESP32-S3) plus an NVS write does not happen
+        // inside the tick() that is also trying to push updates to every open tab.
         License *lic = &_lic;
         _paste.onChange([lic](const String &payload) {
             lic->submit(payload.c_str(), payload.length());

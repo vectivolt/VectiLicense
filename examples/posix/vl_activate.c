@@ -16,13 +16,13 @@
  * Build (macOS): the same, plus -framework IOKit -framework CoreFoundation
  *
  * This is the one example that has actually been run: it compiles and runs on
- * macOS, and the keygen -> issue -> activate -> re-check cycle below was
- * exercised end to end against a locally generated key. It has not been built
- * on Linux or a Raspberry Pi, and it is not a ctest case. See the README's
- * "What has actually been built and run".
+ * macOS and on a Raspberry Pi 4 (Debian arm64, gcc 14.2, the Linux command
+ * above, no warnings), and on both the keygen -> issue -> activate -> re-check
+ * cycle below was exercised end to end against a locally generated key. It is
+ * not a ctest case. See the README's "What has actually been built and run".
  *
  * Then, on the vendor's machine:
- *   python3 tools/vl_mint.py keygen --out vendor.key
+ *   python3 tools/vl_mint.py keygen --key vendor.key
  *   # paste the printed C array over VENDOR_KEYS below, rebuild
  *   python3 tools/vl_mint.py issue --key vendor.key --family 1 \
  *           --device-id <the 26 characters this program printed> \

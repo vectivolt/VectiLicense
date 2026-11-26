@@ -31,7 +31,8 @@ extern "C" {
  * fully reduced. There is no error code and no third state: anything other
  * than 1 means do not trust the message.
  *
- * No allocation, no recursion, ~1.5 KB of stack. */
+ * No allocation, no recursion. About 4 KB of stack below the caller, measured
+ * with -fstack-usage: see docs/API.md, Threading, stack and timing. */
 int vl_ed25519_verify(const uint8_t sig[VL_ED25519_SIG_LEN],
                       const uint8_t *msg, size_t msg_len,
                       const uint8_t pk[VL_ED25519_PUBKEY_LEN]);

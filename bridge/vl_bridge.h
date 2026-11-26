@@ -14,7 +14,8 @@
 // Threading, which is the whole reason submit()/pump() exist:
 //
 //   * VectiSerial's onMessage() and VectiNet's portal POST run on the AsyncTCP
-//     task. Verifying there means an Ed25519 verify (~30 ms on an ESP32) and,
+//     task. Verifying there means an Ed25519 verify (an estimated 0.4 s on a
+//     240 MHz ESP32-S3; see the README's Footprint) and,
 //     worse, an NVS write inside blob_store() — a blocking flash erase on the
 //     task that is servicing every other socket.
 //   * So those paths call submit(), which only memcpy's into one slot and sets
@@ -30,7 +31,7 @@
 //
 //     static const vl_pubkey_t KEYS[] = { { .key_id = 1, .key = { ... } } };
 //     static const vl_config_t CFG = { KEYS, 1, /*family*/ 2, nullptr, 0, 0 };
-//     static vl_hal_t hal = vl_hal_esp32();          // or your own
+//     static vl_hal_t hal = *vl_hal_esp32();         // a copy; or your own
 //     static vecti::License license(&CFG, &hal);
 //
 //     void setup() { license.begin(); }               // re-verify what's stored

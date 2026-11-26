@@ -19,12 +19,12 @@
  * the matching library is not installed, so this sketch builds with none of
  * them and activation still works over the serial console.
  *
- * NEVER COMPILED, NEVER FLASHED. This file is written to the ESP32 Arduino API
- * and has not been built once in this repository, which has no ESP32 toolchain
- * — nor has hal/esp32, nor have the four bridges it includes below. The core,
- * transport, vecti::License and the POSIX example are the parts that are built
- * and run here; this sketch is not. See the README's "What has actually been
- * built and run".
+ * COMPILED, NEVER FLASHED. Built with PlatformIO (espressif32 6.8.0, i.e.
+ * Arduino-ESP32 2.0.17, board esp32-s3-devkitc-1) with NONE of the sibling
+ * libraries installed: it links, with no warnings, but the four bridges below
+ * compiled to nothing, so they have still never been built against VectiNet,
+ * VectiDash, VectiSerial or VectiOTA. It has never run on a board. See the
+ * README's "What has actually been built and run".
  *
  * platformio.ini:
  *
@@ -195,8 +195,8 @@ void setup()
 void loop()
 {
     /* Everything that pastes a blob in — portal, dashboard, console — only
-     * queues it. This is where the Ed25519 verify — tens of milliseconds on
-     * this part — and the NVS write happen, on the loop task, off the
+     * queues it. This is where the Ed25519 verify — an estimated 0.4 s on an
+     * ESP32-S3 at 240 MHz — and the NVS write happen, on the loop task, off the
      * network stack's task. */
     license->pump();
 

@@ -262,9 +262,10 @@ int gate_uart_rx(char ch)
     if (vl_line_push(&g_rx, ch) != VL_OK) {
         return 0;
     }
-    /* A whole line arrived. Verifying it takes tens of milliseconds, which is
-     * far too long for an interrupt handler on most parts — set a flag here
-     * and call gate_activate() from your main loop if that is your case. */
+    /* A whole line arrived. Verifying it takes hundreds of milliseconds on a
+     * small core (an estimate), far too long for an interrupt handler on most
+     * parts — set a flag here and call gate_activate() from your main loop if
+     * that is your case. */
     g_status = vl_verify(g_rx.buf, &CFG, &BOARD_HAL, &g_license);
     if (g_status == VL_OK) {
         /* Store only after it verified. Storing first means a mistyped blob
