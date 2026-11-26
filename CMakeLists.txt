@@ -189,6 +189,12 @@ if(VL_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/core
             ${CMAKE_CURRENT_SOURCE_DIR}/bridge
             ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+        # This one compiles hal/esp32's real source against stand-in IDF
+        # headers, which must not be on any other target's include path.
+        if(name STREQUAL "test_vl_hal_esp32")
+            target_include_directories(${name} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/esp32_stub)
+        endif()
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
             target_compile_options(${name} PRIVATE
                 -Wall -Wextra $<$<BOOL:${VL_WERROR}>:-Werror>)

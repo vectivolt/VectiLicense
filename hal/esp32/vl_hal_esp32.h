@@ -8,18 +8,28 @@
  * Identity segments, in fingerprint order. THIS ORDER IS PART OF THE ON-WIRE
  * FORMAT — changing it invalidates every licence already issued.
  *
- *   0   6 bytes  factory MAC, eFuse BLOCK1      (esp_efuse_mac_get_default)
- *   1   1 byte   chip model                     (esp_chip_info().model)
+ *   0   6 bytes  factory MAC, eFuse BLOCK1      (esp_efuse_mac_get_default),
+ *                first octet first, as `espefuse.py summary` prints it
+ *   1   1 byte   chip model                     (esp_chip_info().model;
+ *                                                ESP32-S3 = 9)
  *   2  16 bytes  eFuse OPTIONAL_UNIQUE_ID       (ESP32-S2/S3/C3/C6/H2 only, and
- *                                                only when not all zero)
+ *                                                only when not all zero), byte
+ *                [0] first, as summary prints it
  *
- * Everything hashed is burned into the die by Espressif and read raw, so the
- * fingerprint survives an SDK upgrade, a reflash and a flash-part change, and
- * a flash image copied to another board yields that board's fingerprint. eFuse
- * bits can only be set, never cleared; matching another die's MAC AND 128-bit
- * unique id by setting bits needs a donor die whose bits are a subset of both.
- * vl_mint.py `device-id --esp32` computes the same id on the host from the
- * values `espefuse.py summary` prints.
+ * The MAC and the unique id are burned into the die by Espressif and read raw.
+ * The model byte is not read from the die: it is the esp_chip_model_t the IDF
+ * reports for the target the image was built for, which is the chip it runs
+ * on, and it keeps an S3 licence off a C3. So the fingerprint survives an SDK
+ * upgrade, a reflash and a flash-part change, and a flash image copied to
+ * another board yields that board's fingerprint. eFuse bits can only be set,
+ * never cleared; matching another die's MAC AND 128-bit unique id by setting
+ * bits needs a donor die whose bits are a subset of both.
+ *
+ * `vl_mint.py device-id --esp32 --mac .. --model .. [--uid ..]` computes the
+ * same id on the host from what `espefuse.py summary` prints, and
+ * tests/test_vl_hal_esp32.c holds the two in step. The bench board (MAC
+ * d0:cf:13:73:b7:38, ESP32-S3, UID 7b9f020ba13575a5299f6e75e66e665a) is
+ * 19PPVWEP2AD037V5ZMQV3S3XH8.
  *
  * Optional callbacks provided:
  *   now_epoch       time(NULL), rejected as unset below 2020-01-01

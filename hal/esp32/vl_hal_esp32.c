@@ -70,7 +70,9 @@
 /* JEDEC id belongs to whichever flash part a module batch was built with and  */
 /* needs a live flash transaction to read — so an SDK upgrade or a transient    */
 /* read would have unlicensed devices that never changed. The chip model stays: */
-/* it is one stable enum byte that keeps an S3 licence off a C3.               */
+/* it is one enum byte that keeps an S3 licence off a C3. It is the build      */
+/* target's constant rather than an eFuse read, and stable across IDF 4.4 and  */
+/* 5.x for ESP32/S2/S3/C3 (H2 is 6 in 4.4 and 16 in 5.x).                       */
 /* -------------------------------------------------------------------------- */
 #ifdef VL_HAVE_UNIQUE_ID
 /* Returns 1 and fills `uid` when the die carries a non-zero OPTIONAL_UNIQUE_ID. A die
@@ -98,7 +100,10 @@ static vl_status_t read_id_segment(void *ctx, uint32_t idx,
 
     switch (idx) {
     case 0: {
-        uint8_t mac[VL_SEG_MAC_LEN];
+        /* 8, not 6: on an IEEE 802.15.4 build (IDF 4.4: CONFIG_IEEE802154_ENABLED,
+         * the H2) esp_efuse_mac_get_default() writes the 8-byte EUI-64. The
+         * segment is still the 6-byte MAC-48 it starts with, on every target. */
+        uint8_t mac[8];
         if (cap < VL_SEG_MAC_LEN) return VL_ERR_BUFFER_TOO_SMALL;
         if (esp_efuse_mac_get_default(mac) != ESP_OK) return VL_ERR_PLATFORM;
         memcpy(out, mac, VL_SEG_MAC_LEN);
@@ -150,23 +155,31 @@ static vl_status_t now_epoch(void *ctx, uint32_t *out_epoch)
 /* -------------------------------------------------------------------------- */
 /* NVS-backed storage                                                          */
 /* -------------------------------------------------------------------------- */
+/* VL_ERR_NOT_FOUND only for a namespace that has never been written, which is
+ * what a read-only open reports for it. Anything else (NVS never initialised,
+ * no partition, corruption) is VL_ERR_PLATFORM: mapping those to "nothing
+ * stored" told a technician to re-install a licence the board still had, and
+ * read a high-water mark of 0. */
 static vl_status_t nvs_begin(nvs_open_mode_t mode, nvs_handle_t *h)
 {
-    return (nvs_open(VL_NVS_NAMESPACE, mode, h) == ESP_OK) ? VL_OK : VL_ERR_PLATFORM;
+    esp_err_t err = nvs_open(VL_NVS_NAMESPACE, mode, h);
+    if (err == ESP_OK) return VL_OK;
+    return (err == ESP_ERR_NVS_NOT_FOUND) ? VL_ERR_NOT_FOUND : VL_ERR_PLATFORM;
 }
 
 static vl_status_t hwm_load(void *ctx, uint32_t *out)
 {
     nvs_handle_t h;
     esp_err_t err;
+    vl_status_t st;
     (void)ctx;
     if (out == NULL) return VL_ERR_INVALID_ARG;
-    if (nvs_begin(NVS_READONLY, &h) != VL_OK) {
-        /* A namespace that has never been written does not exist yet. That is
-         * "no mark recorded", not a failure. */
-        *out = 0u;
+    st = nvs_begin(NVS_READONLY, &h);
+    if (st == VL_ERR_NOT_FOUND) {
+        *out = 0u;                     /* never written: no mark recorded */
         return VL_OK;
     }
+    if (st != VL_OK) return st;
     err = nvs_get_u32(h, VL_NVS_KEY_HWM, out);
     nvs_close(h);
     if (err == ESP_ERR_NVS_NOT_FOUND) { *out = 0u; return VL_OK; }
@@ -190,15 +203,20 @@ static vl_status_t blob_load(void *ctx, char *out, size_t cap, size_t *out_len)
     nvs_handle_t h;
     esp_err_t err;
     size_t len;
+    vl_status_t st;
     (void)ctx;
     if (out == NULL || out_len == NULL || cap == 0u) return VL_ERR_INVALID_ARG;
-    if (nvs_begin(NVS_READONLY, &h) != VL_OK) return VL_ERR_NOT_FOUND;
+    st = nvs_begin(NVS_READONLY, &h);
+    if (st != VL_OK) return st;
     len = cap;                                   /* in/out, includes the NUL */
     err = nvs_get_str(h, VL_NVS_KEY_BLOB, out, &len);
     nvs_close(h);
     if (err == ESP_ERR_NVS_NOT_FOUND) return VL_ERR_NOT_FOUND;
     if (err == ESP_ERR_NVS_INVALID_LENGTH) return VL_ERR_BUFFER_TOO_SMALL;
     if (err != ESP_OK || len == 0u) return VL_ERR_PLATFORM;
+    /* An empty string is what vecti::License::clear() stores; like hal/posix,
+     * that is "nothing stored", not a blob to hand to vl_verify(). */
+    if (len == 1u) return VL_ERR_NOT_FOUND;
     *out_len = len - 1u;                         /* report without the NUL */
     return VL_OK;
 }
