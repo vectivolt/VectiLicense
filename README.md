@@ -64,9 +64,10 @@ network call, ever, and nothing to phone home to.
   [Footprint](#footprint).
 - **Apache-2.0**, one vendored public-domain dependency (TweetNaCl's verify half).
 - **What is executed here is a short list, and it is written down:**
-  [What has actually been built and run](#what-has-actually-been-built-and-run). Nothing
-  has run on a microcontroller yet; most of `hal/`, the four sibling bridges and two of
-  the three examples are *written* or at most *compiled*, not *run*.
+  [What has actually been built and run](#what-has-actually-been-built-and-run). `core/`
+  and `hal/esp32/` run on silicon inside VectiPLC since 26 Nov 2026 (two ESP32-S3 bench
+  boards by 27 Nov); the rest of `hal/`, `transport/`, the four sibling bridges and the
+  three examples are *written* or at most *compiled* or host-run, not run on a board.
 
 ---
 
@@ -95,11 +96,11 @@ is the long version, and it is the most important file here.
 
 ## What has actually been built and run
 
-**Run here: the host test suite, the minting tool and the POSIX example. Compiled and
-linked for Cortex-M, compiled and linked for ESP32-S3, and run on neither: nothing in
-this repository has yet executed on a microcontroller.** Compiling is not running, and
-the list below keeps the two apart. Everything not listed is source that has been read
-and reviewed and never built.
+**Run here: the host test suite, the minting tool and the POSIX example. Run on
+silicon, inside a product: `core/` and `hal/esp32/` in VectiPLC on ESP32-S3 boards
+since 26 Nov 2026 (below). Compiled and linked for Cortex-M and never run there.**
+Compiling is not running, and the list below keeps the two apart. Everything not
+listed is source that has been read and reviewed and never built.
 
 **Executed, as `ctest` cases:**
 
@@ -146,7 +147,33 @@ and reviewed and never built.
   default, so this is not a practical blocker — but "freestanding" should not be read as
   "links against literally nothing", and that is why it is written down here.
 
-**Compiled with the real ESP32 toolchain, never run on silicon:**
+**Run on silicon, inside VectiPLC (since 26 Nov 2026):**
+
+VectiPLC pins this repository at `d4da3b6` as a PlatformIO dependency (`platform =
+espressif32@6.8.0`, the toolchain below) and calls `vl_hal_esp32()`,
+`vl_compute_fingerprint()`, `vl_encode_device_id()`, the HAL's `blob_load` /
+`blob_store` and `vl_verify()` at every boot and on every licence install (its
+`src/esp32/licence.cpp`). On the VectiVolt bench, two bare V0.4 PLC boards
+(ESP32-S3-WROOM-1U-N8R2), recorded in VectiPLC's docs/19 and the bench log:
+
+- **The device id.** The first board computes `19PPVWEP2AD037V5ZMQV3S3XH8` on the chip,
+  the id `vl_mint.py device-id --esp32` computes on the host from its eFuses (26 Nov).
+  So the HAL's eFuse byte order holds on real silicon, for that chip.
+- **Install and refusal through `vl_verify()`.** A licence minted for the board
+  (family `0x10`, key id 222 of the dev keyset) is accepted, stored in NVS and verified
+  again at every boot (`lic=ok`); a licence for another device id is refused
+  (`device_mismatch`), and so is one for another family (`bad_family`). A second board
+  was licensed on 27 Nov. VectiPLC's own CHARGE-bit rule (`no_charge`) is the product's,
+  not this library's.
+- **Not exercised there:** the clock and high-water-mark callbacks (VectiPLC has no wall
+  clock and sets `now_epoch`, `hwm_load` and `hwm_store` to NULL, so its licences are
+  perpetual), `secure_posture`, `transport/` and the bridges. `vl_verify()`'s time on the
+  S3 is still not recorded: VectiPLC logs it at boot (`lic: ok, ... verified in <N> us`),
+  and no bench record keeps that line yet, so [Footprint](#footprint)'s 0.4 s remains an
+  estimate.
+
+**Compiled with the real ESP32 toolchain in this repository (these standalone builds
+were never flashed):**
 
 - **`core/`, `transport/` and `hal/esp32/` as a PlatformIO library.** PlatformIO 6.2,
   `platform = espressif32@6.8.0` (Arduino-ESP32 2.0.17 on ESP-IDF 4.4.7),
@@ -167,10 +194,8 @@ and reviewed and never built.
   had never compiled before: two of its includes could not resolve. Neither the
   Arduino IDE nor `arduino-cli` has been run.
 
-None of it has executed. The first run on silicon is the bench board, which should
-print the device id `19PPVWEP2AD037V5ZMQV3S3XH8`; until it does, the byte order the
-HAL reads its eFuses in rests on the IDF 4.4.7 source, and `vl_verify()`'s time on an
-ESP32-S3 is an estimate ([Footprint](#footprint)).
+None of these three builds has been flashed. The library itself has run on silicon
+only as part of VectiPLC (above).
 
 **Run outside the test suite:**
 
@@ -233,7 +258,7 @@ either.
 | `core/` — Ed25519 verify, SHA-256/512, base32, parse, constant-time compare | any conforming C99 target | **compile-verified**: clang (macOS arm64) and gcc 14.2 (Raspberry Pi, arm64) `-Wall -Wextra -Werror -Wpedantic -Wconversion`; `arm-none-eabi-gcc` for Cortex-M4 and Cortex-M0+ with `-ffreestanding -nostdinc -Os` and the same warning set, as ctest cases `freestanding_cortex-m4` / `freestanding_cortex-m0plus`; `xtensa-esp32s3-elf-gcc` 8.4.0 with the same set. Run on the two hosts only |
 | `hal/posix/` — Linux, Raspberry Pi, macOS | POSIX hosts | **compile-verified and run** on macOS and a Raspberry Pi 4; end-to-end activation exercised on both |
 | `hal/none/` — the documented stub to fill in | anything | **compile-verified** |
-| `hal/esp32/` — factory MAC + chip model + eFuse `OPTIONAL_UNIQUE_ID`, NVS storage, Secure Boot / Flash Encryption posture | ESP32 family | **compiled** with Arduino-ESP32 2.0.17 (IDF 4.4.7) for ESP32-S3, and its source **run on the host** against stand-in IDF headers (`test_vl_hal_esp32`). **Never run on silicon** |
+| `hal/esp32/` — factory MAC + chip model + eFuse `OPTIONAL_UNIQUE_ID`, NVS storage, Secure Boot / Flash Encryption posture | ESP32 family | **compiled** with Arduino-ESP32 2.0.17 (IDF 4.4.7) for ESP32-S3, and its source **run on the host** against stand-in IDF headers (`test_vl_hal_esp32`). **Run on silicon inside VectiPLC** (ESP32-S3 bench boards, since 26 Nov 2026): fingerprint, device id and NVS storage; `secure_posture` and the clock / high-water callbacks not exercised there |
 | `hal/rp2040/` — `pico_get_unique_board_id`, flash-sector storage | RP2040 / RP2350 | written to the documented pico-sdk API; type-checked in CI against stand-in headers. **Never run** |
 | `hal/stm32/` — `HAL_GetUIDw0/1/2`, or the raw UID base address | STM32 F0…U5, WB, WL | written to the documented Cube HAL API; type-checked in CI. **Never run** |
 | `hal/nxp/` — Kinetis `SIM->UIDx`, i.MX RT OCOTP | NXP Kinetis, i.MX RT | written to the documented MCUXpresso API; type-checked in CI with bogus base addresses. **Never run** |
@@ -424,9 +449,10 @@ valid blob, wall clock / 1,000) and about 8 ms on a Raspberry Pi 4. On a 240 MHz
 ESP32-S3 the estimate is **about 0.4 s**, from the compiled inner loop of the field
 multiply (23 instructions, 64-bit products inlined) times the ~10,800 multiplies one
 verify performs; this replaces an earlier guess of "tens of milliseconds", and it is
-still an estimate until a board measures it. A Cortex-M0+, with no 32×32→64 multiply,
-is slower again. Either way: call it at boot or from a work task, never from an
-interrupt, a network stack's callback or a loop with deadlines.
+still an estimate until a board's measurement is recorded (VectiPLC logs it at boot;
+no bench record keeps it yet). A Cortex-M0+, with no 32×32→64 multiply, is slower
+again. Either way: call it at boot or from a work task, never from an interrupt, a
+network stack's callback or a loop with deadlines.
 
 Nothing allocates. There is no static writable state anywhere in `core/`.
 
